@@ -393,6 +393,67 @@ _PO_STEPS = [
 ]
 
 
+_TRADE_STEPS = [
+    {
+        "step_id": "analyze",
+        "step_type": "ai_task",
+        "title": "Trade Risk Analysis",
+        "next_step_id": "verify",
+        "config": {
+            "model": os.environ.get("LLM_MODEL", "openai/gpt-4o-mini"),
+            "api_key_env": "LLM_KEY",
+            "system_prompt": (
+                "You are a crypto trade risk analyst. "
+                "Review the trade order data and run all risk checks. "
+                "Return ONLY a JSON object with: "
+                "trade_id, review_decision (approve/reject/escalate_human), "
+                "risk_level (low/medium/high/critical), "
+                "market_check ({price_usd, volatility_score, change_24h_pct}), "
+                "balance_check ({sufficient, available_margin}), "
+                "portfolio_risk ({concentration_pct, risk_level, var_1d_usd}), "
+                "sanctions_check ({is_sanctioned, is_pep, list_name}), "
+                "anomaly_flags (array), "
+                "findings (array of {code, severity, summary}), "
+                "rejection_reasons (array, empty if not rejected), "
+                "requires_human_approval (bool), "
+                "decision_reasoning (string), "
+                "risk_score (0.0-1.0). "
+                "IMMEDIATE REJECT rules: sanctions hit OR leverage > 10x. "
+                "MANDATORY ESCALATE rules: order_size_usd >= 10000 OR leverage > 3."
+            ),
+        },
+    },
+    {
+        "step_id": "verify",
+        "step_type": "verification",
+        "title": "Trade Risk Snapshot",
+        "next_step_id": "decide",
+        "config": {"recommended_action": "review"},
+    },
+    {
+        "step_id": "decide",
+        "step_type": "decision_point",
+        "title": "Trading Decision Gate",
+        "config": {
+            "decision_kind": "trade_review",
+            "question": "Trade risk analysis complete. Select trading decision:",
+            "required_actor": {"actor_type": "human"},
+            "options": [
+                {"option_id": "approve",        "label": "Approve trade"},
+                {"option_id": "reject",         "label": "Reject trade"},
+                {"option_id": "escalate_human", "label": "Escalate to human trader"},
+            ],
+            "route_map": {
+                "approve":        "__end__",
+                "reject":         "__end__",
+                "escalate_human": "__end__",
+                "_default":       "__end__",
+            },
+        },
+    },
+]
+
+
 def _hitl_post(path: str, body: dict, timeout: int = 180) -> Any:
     try:
         r = _client.post(
@@ -609,6 +670,69 @@ def mova_hitl_start_po(po_id: str, approver_employee_id: str = "") -> str:
             },
         },
         "steps": _PO_STEPS,
+    }
+
+    start = _hitl_post("/api/v1/contracts", body)
+    if not start.get("ok"):
+        return json.dumps(start, ensure_ascii=False, indent=2)
+
+    result = _run_steps(contract_id)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool(name="mova_hitl_start_trade")
+def mova_hitl_start_trade(
+    trade_id: str,
+    wallet_address: str,
+    chain: str,
+    token_pair: str,
+    side: str,
+    order_type: str,
+    order_size_usd: float,
+    leverage: float = 1.0,
+) -> str:
+    """Start a HITL crypto trade risk review contract.
+
+    Call this when the user wants to submit a trade order for risk review.
+
+    Args:
+        trade_id: Trade order ID (e.g. "TRD-2026-0001").
+        wallet_address: Source wallet address (0x...).
+        chain: Blockchain network: "ethereum", "base", "arbitrum", etc.
+        token_pair: Trading pair, e.g. "BTC/USDT", "ETH/USDC".
+        side: "buy" or "sell".
+        order_type: "market" or "limit".
+        order_size_usd: Order size in USD.
+        leverage: Leverage multiplier (1 = no leverage).
+
+    Returns JSON. If status is "waiting_human" — show the risk analysis summary
+    and decision options (approve/reject/escalate_human), wait for user choice,
+    then call mova_hitl_decide.
+    """
+    contract_id = f"ctr-trade-{uuid.uuid4().hex[:8]}"
+
+    body = {
+        "envelope": {
+            "kind": "env.contract.start_v0",
+            "envelope_id": f"env-{uuid.uuid4().hex[:8]}",
+            "contract_id": contract_id,
+            "actor": {"actor_type": "human", "actor_id": "user"},
+            "payload": {
+                "template_id": "tpl.crypto.trade_review_hitl_v0",
+                "policy_profile_ref": "policy.hitl.crypto.trade_review_v0",
+                "initial_inputs": [
+                    {"key": "trade_id",        "value": trade_id},
+                    {"key": "wallet_address",  "value": wallet_address},
+                    {"key": "chain",           "value": chain},
+                    {"key": "token_pair",      "value": token_pair},
+                    {"key": "side",            "value": side},
+                    {"key": "order_type",      "value": order_type},
+                    {"key": "order_size_usd",  "value": str(order_size_usd)},
+                    {"key": "leverage",        "value": str(leverage)},
+                ],
+            },
+        },
+        "steps": _TRADE_STEPS,
     }
 
     start = _hitl_post("/api/v1/contracts", body)
