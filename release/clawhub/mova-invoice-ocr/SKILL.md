@@ -1,130 +1,51 @@
 ---
 name: mova-invoice-ocr
-description: >
-  Submit any financial document — invoice, bill, receipt, or purchase order —
-  to the MOVA contract platform for automated OCR extraction, risk scoring,
-  and human-in-the-loop approval. Trigger when the user shares a document
-  image URL or asks to process, extract, or review a financial document.
-  Always confirm with the user before starting. After completion, return a
-  structured summary and a signed audit receipt.
+description: Process any financial document — invoice, bill, receipt, or purchase order — via MOVA OCR and human-in-the-loop approval. Trigger when the user shares a document image URL or asks to process, extract, or review a financial document. Always confirm before starting.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","requires":{"env":[{"name":"MOVA_API_KEY","description":"Your MOVA API key. Register free at https://mova-lab.eu"}],"bins":[{"name":"mova-bridge","install":"pip install mova-bridge","source":"https://github.com/mova-compact/mova-bridge"}]}}}
 ---
 
-# MOVA Invoice OCR — Agent Instructions
-
-## What this skill does
-
-Submits a financial document to the MOVA platform and guides the user through a three-step contract:
-
-1. **OCR extraction** — vision model reads the document and returns structured data: vendor, amounts, dates, line items, VAT, IBAN
-2. **Risk scoring** — automated check assigns a risk score (0.0–1.0) and flags anomalies
-3. **Human approval gate** — user chooses: approve / reject / escalate / request more info
-4. **Audit receipt** — immutable signed record of the full decision: who decided, which option, reason, timestamp
+# MOVA Invoice OCR
 
 ## When to trigger
 
-Activate when the user:
-- Shares an image URL of a financial document (invoice, bill, receipt, PO)
-- Asks to "process", "extract", "check", "OCR", or "review" a document
-- Mentions "pay this", "approve this invoice", "accounts payable"
+Activate when the user shares an image URL of a financial document or asks to process/OCR/approve an invoice.
 
-**Before starting**, confirm: _"I'll submit this document to MOVA for OCR processing and risk review. Continue?"_
+**Before starting**, confirm: "Отправить документ на обработку через MOVA? (OCR + проверка рисков)"
 
-If the user has only sent a file (not a URL), ask once: _"Please share a direct HTTPS link to the image (e.g. via imgbb or Dropbox). Telegram photos cannot be accessed directly."_
+If no URL provided — ask once for a direct HTTPS image link.
 
----
+## Step 1 — Submit document
 
-## Step 1 — Submit the document
+Run exec:
 
-```
-mova-bridge call mova_hitl_start --file-url URL
-```
+    mova-bridge call mova_hitl_start --file-url URL
 
-Replace `URL` with the HTTPS image link. The command returns JSON.
+Replace URL with the HTTPS link. Wait for JSON output.
 
-**On success** (`status: "waiting_human"`), show the user what was extracted:
+## Step 2 — Show result and decision options
 
-```
-✅ Document processed
+If `status = "waiting_human"` — show extracted data and ask user to choose:
+- approve — process payment
+- reject — notify vendor
+- escalate_accountant — forward to accountant
+- request_info — ask vendor for clarification
 
-Vendor:       [vendor_name]
-Amount:       [total_amount] [currency]
-Invoice date: [invoice_date]
-Due date:     [due_date]
-Risk score:   [risk_score] / 1.0  [findings if any]
+Then run exec:
 
-Contract ID:  [contract_id]
-```
+    mova-bridge call mova_hitl_decide --contract-id CONTRACT_ID --option OPTION --reason "REASON"
 
-Then present the decision options:
+## Step 3 — Show audit receipt
 
-```
-Please choose an action:
-  1. approve — process payment
-  2. reject — notify vendor
-  3. escalate_accountant — forward to accountant
-  4. request_info — ask vendor for clarification
-```
+If `status = "completed"` — show contract_id, decision, and audit_receipt_id.
 
----
+The user can re-fetch the receipt anytime:
 
-## Step 2 — Record the decision
+    mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
 
-After the user chooses, run:
+## Rules
 
-```
-mova-bridge call mova_hitl_decide \
-  --contract-id CONTRACT_ID \
-  --option OPTION \
-  --reason "REASON"
-```
-
-Use the user's exact words as the reason. If they gave none, use a short default like "Approved by user".
-
----
-
-## Step 3 — Show the audit receipt
-
-On `status: "completed"`, show:
-
-```
-✅ Done — Contract CONTRACT_ID
-
-Decision:      OPTION
-Reason:        "REASON"
-Decided at:    TIMESTAMP
-Steps:         3/3 completed
-Audit receipt: AUDIT_RECEIPT_ID  (immutable, stored on MOVA platform)
-```
-
-The audit receipt is a permanent record. The user can re-fetch it at any time by asking "show audit for CONTRACT_ID".
-
----
-
-## Other commands
-
-```bash
-# Re-fetch audit receipt
-mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
-
-# Check status of an in-progress contract
-mova-bridge call mova_hitl_status --contract-id CONTRACT_ID
-```
-
----
-
-## What the user receives
-
-| Output | Description |
-|--------|-------------|
-| Extracted fields | Vendor name, IBAN, tax ID, total, subtotal, VAT, line items, dates |
-| Risk score | 0.0 (clean) – 1.0 (high risk), with flagged findings |
-| Decision options | Approve / Reject / Escalate / Request info |
-| Audit receipt ID | Permanent signed record of the decision |
-| Event log | 5 signed envelopes: contract start, OCR, risk check, decision, completion |
-
-> **Privacy note:** The document image must be accessible via a public HTTPS URL so the MOVA platform can process it.
-> Use a trusted host (your own storage, Dropbox, imgbb). Do not share highly confidential documents via public URLs.
->
-> **Audit retention:** Audit receipts are stored immutably on the MOVA platform. Review the MOVA privacy policy at https://mova-lab.eu before processing sensitive documents.
+- NEVER make HTTP requests manually
+- NEVER construct JSON payloads for MOVA API  
+- NEVER invent or simulate results
+- If exec fails — show the exact error, do not retry via HTTP
+- Run exec command directly: mova-bridge call ... (not wrapped in bash)
