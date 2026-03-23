@@ -454,6 +454,69 @@ _TRADE_STEPS = [
 ]
 
 
+_COMPLAINTS_STEPS = [
+    {
+        "step_id": "analyze",
+        "step_type": "ai_task",
+        "title": "Complaint Classification & Risk Analysis",
+        "next_step_id": "verify",
+        "config": {
+            "model": os.environ.get("LLM_MODEL", "openai/gpt-4o-mini"),
+            "api_key_env": "LLM_KEY",
+            "system_prompt": (
+                "You are an EU financial services complaints handler. "
+                "Review the complaint data and classify it. "
+                "Return ONLY a JSON object with: "
+                "complaint_id, triage_decision (routine/manual_review/blocked), "
+                "product_risk (low/medium/high), "
+                "sentiment_flags (array: compensation_claim, regulator_threat, fraud_signal, urgent), "
+                "repeat_customer (bool), "
+                "completeness_check ({text_present, channel_valid, product_identified}), "
+                "anomaly_flags (array), "
+                "findings (array of {code, severity, summary}), "
+                "requires_human_approval (bool), "
+                "recommended_action (auto_resolve/manual_review/reject_incomplete), "
+                "decision_reasoning (string), "
+                "risk_score (0.0-1.0), "
+                "draft_response_hint (brief suggested response direction). "
+                "MANDATORY HUMAN REVIEW: compensation claim OR regulator threat OR repeat customer OR product_risk=high OR fraud_signal. "
+                "BLOCKED: complaint_text empty or under 10 characters."
+            ),
+        },
+    },
+    {
+        "step_id": "verify",
+        "step_type": "verification",
+        "title": "Complaint Risk Snapshot",
+        "next_step_id": "decide",
+        "config": {"recommended_action": "review"},
+    },
+    {
+        "step_id": "decide",
+        "step_type": "decision_point",
+        "title": "Complaints Handler Decision Gate",
+        "config": {
+            "decision_kind": "complaint_review",
+            "question": "Complaint classification complete. Select handling decision:",
+            "required_actor": {"actor_type": "human"},
+            "options": [
+                {"option_id": "resolve",        "label": "Resolve — send standard response"},
+                {"option_id": "escalate",       "label": "Escalate to complaints officer"},
+                {"option_id": "reject",         "label": "Reject — incomplete or invalid"},
+                {"option_id": "regulator_flag", "label": "Flag for regulator reporting"},
+            ],
+            "route_map": {
+                "resolve":        "__end__",
+                "escalate":       "__end__",
+                "reject":         "__end__",
+                "regulator_flag": "__end__",
+                "_default":       "__end__",
+            },
+        },
+    },
+]
+
+
 _AML_STEPS = [
     {
         "step_id": "analyze",
@@ -928,6 +991,74 @@ def mova_hitl_start_aml(
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
+@mcp.tool(name="mova_hitl_start_complaint")
+def mova_hitl_start_complaint(
+    complaint_id: str,
+    customer_id: str,
+    complaint_text: str,
+    channel: str,
+    product_category: str,
+    complaint_date: str,
+    previous_complaints: str = "[]",
+    attachments: str = "[]",
+    customer_segment: str = "",
+    preferred_language: str = "en",
+) -> str:
+    """Start a HITL EU consumer complaint handling contract (classify → risk check → human decision).
+
+    Call this when the user submits or asks to process a customer complaint.
+
+    Args:
+        complaint_id: Complaint ID (e.g. "CMP-2026-1001").
+        customer_id: Customer ID in the CRM.
+        complaint_text: Full complaint text from the customer.
+        channel: Submission channel: "web", "phone", "email", "branch".
+        product_category: Product category: "payments", "investments", "lending", "insurance", etc.
+        complaint_date: Date of complaint (YYYY-MM-DD).
+        previous_complaints: JSON array of prior complaint IDs for this customer.
+        attachments: JSON array of attachment filenames.
+        customer_segment: "retail", "sme", "corporate", etc.
+        preferred_language: ISO language code (default "en").
+
+    Returns JSON. If status is "waiting_human" — show the classification and ask agent to choose:
+    resolve / escalate / reject / regulator_flag. Then call mova_hitl_decide.
+    """
+    contract_id = f"ctr-cmp-{uuid.uuid4().hex[:8]}"
+
+    body = {
+        "envelope": {
+            "kind": "env.contract.start_v0",
+            "envelope_id": f"env-{uuid.uuid4().hex[:8]}",
+            "contract_id": contract_id,
+            "actor": {"actor_type": "human", "actor_id": "user"},
+            "payload": {
+                "template_id": "tpl.complaints.handler_hitl_v0",
+                "policy_profile_ref": "policy.hitl.complaints.handler_v0",
+                "initial_inputs": [
+                    {"key": "complaint_id",       "value": complaint_id},
+                    {"key": "customer_id",         "value": customer_id},
+                    {"key": "complaint_text",      "value": complaint_text},
+                    {"key": "channel",             "value": channel},
+                    {"key": "product_category",    "value": product_category},
+                    {"key": "complaint_date",      "value": complaint_date},
+                    {"key": "previous_complaints", "value": previous_complaints},
+                    {"key": "attachments",         "value": attachments},
+                    {"key": "customer_segment",    "value": customer_segment},
+                    {"key": "preferred_language",  "value": preferred_language},
+                ],
+            },
+        },
+        "steps": _COMPLAINTS_STEPS,
+    }
+
+    start = _hitl_post("/api/v1/contracts", body)
+    if not start.get("ok"):
+        return json.dumps(start, ensure_ascii=False, indent=2)
+
+    result = _run_steps(contract_id)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
 # ── CLI call mode ──────────────────────────────────────────────────────────────
 
 def _cli_call(args: list[str]) -> None:
@@ -966,6 +1097,18 @@ def _cli_call(args: list[str]) -> None:
             order_type=kwargs["order_type"],
             order_size_usd=float(kwargs["order_size_usd"]),
             leverage=float(kwargs.get("leverage", 1.0)),
+        ),
+        "mova_hitl_start_complaint": lambda: mova_hitl_start_complaint(
+            complaint_id=kwargs["complaint_id"],
+            customer_id=kwargs["customer_id"],
+            complaint_text=kwargs.get("complaint_text", ""),
+            channel=kwargs.get("channel", "web"),
+            product_category=kwargs.get("product_category", ""),
+            complaint_date=kwargs.get("complaint_date", ""),
+            previous_complaints=kwargs.get("previous_complaints", "[]"),
+            attachments=kwargs.get("attachments", "[]"),
+            customer_segment=kwargs.get("customer_segment", ""),
+            preferred_language=kwargs.get("preferred_language", "en"),
         ),
         "mova_hitl_start_aml":     lambda: mova_hitl_start_aml(
             alert_id=kwargs["alert_id"],
