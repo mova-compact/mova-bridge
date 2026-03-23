@@ -333,6 +333,66 @@ _INVOICE_STEPS = [
 ]
 
 
+_PO_STEPS = [
+    {
+        "step_id": "analyze",
+        "step_type": "ai_task",
+        "title": "PO Risk Analysis",
+        "next_step_id": "verify",
+        "config": {
+            "model": os.environ.get("LLM_MODEL", "openai/gpt-4o-mini"),
+            "api_key_env": "LLM_KEY",
+            "system_prompt": (
+                "You are a procurement risk analyst. "
+                "Review the purchase order data provided and run all connector checks. "
+                "Return ONLY a JSON object with: "
+                "po_id, review_decision (approve/hold/reject/escalate), "
+                "approval_tier (manager/director/board), "
+                "budget_check ({within_budget, utilization_pct, budget_remaining}), "
+                "vendor_status (registered/pending/blacklisted), "
+                "authority_check ({adequate, reason}), "
+                "anomaly_flags (array), "
+                "findings (array of {code, severity, summary}), "
+                "requires_human_approval (bool), "
+                "recommended_action (approve/hold/reject/escalate), "
+                "decision_reasoning (string), "
+                "risk_score (0.0-1.0)."
+            ),
+        },
+    },
+    {
+        "step_id": "verify",
+        "step_type": "verification",
+        "title": "Procurement Risk Snapshot",
+        "next_step_id": "decide",
+        "config": {"recommended_action": "review"},
+    },
+    {
+        "step_id": "decide",
+        "step_type": "decision_point",
+        "title": "Procurement Decision Gate",
+        "config": {
+            "decision_kind": "procurement_review",
+            "question": "AI analysis complete. Select the procurement decision:",
+            "required_actor": {"actor_type": "human"},
+            "options": [
+                {"option_id": "approve",   "label": "Approve PO"},
+                {"option_id": "hold",      "label": "Hold for review"},
+                {"option_id": "reject",    "label": "Reject PO"},
+                {"option_id": "escalate",  "label": "Escalate to director/board"},
+            ],
+            "route_map": {
+                "approve":  "__end__",
+                "hold":     "__end__",
+                "reject":   "__end__",
+                "escalate": "__end__",
+                "_default": "__end__",
+            },
+        },
+    },
+]
+
+
 def _hitl_post(path: str, body: dict, timeout: int = 180) -> Any:
     try:
         r = _client.post(
@@ -509,6 +569,53 @@ def mova_hitl_audit(contract_id: str) -> str:
         contract_id: Contract ID from mova_hitl_start.
     """
     result = _hitl_get(f"/api/v1/contracts/{contract_id}/audit")
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool(name="mova_hitl_start_po")
+def mova_hitl_start_po(po_id: str, approver_employee_id: str = "") -> str:
+    """Start a HITL purchase order approval contract (risk analysis → human decision).
+
+    Call this when the user wants to submit a PO for approval or review.
+
+    Args:
+        po_id: Purchase order ID in the ERP system (e.g. "PO-2026-001").
+        approver_employee_id: Optional employee ID for authority check (e.g. "EMP-1042").
+
+    Returns JSON. If status is "waiting_human" — show the AI risk analysis and decision
+    options (approve/hold/reject/escalate), wait for the user's choice, then call
+    mova_hitl_decide with the selected option.
+    If status is "completed" — show the audit_receipt summary.
+    """
+    contract_id = f"ctr-po-{uuid.uuid4().hex[:8]}"
+
+    initial_inputs = [
+        {"key": "po_id", "value": po_id},
+        {"key": "contract_type", "value": "po_approval"},
+    ]
+    if approver_employee_id:
+        initial_inputs.append({"key": "approver_employee_id", "value": approver_employee_id})
+
+    body = {
+        "envelope": {
+            "kind": "env.contract.start_v0",
+            "envelope_id": f"env-{uuid.uuid4().hex[:8]}",
+            "contract_id": contract_id,
+            "actor": {"actor_type": "human", "actor_id": "user"},
+            "payload": {
+                "template_id": "tpl.erp.po_approval_hitl_v0",
+                "policy_profile_ref": "policy.hitl.erp.po_approval_v0",
+                "initial_inputs": initial_inputs,
+            },
+        },
+        "steps": _PO_STEPS,
+    }
+
+    start = _hitl_post("/api/v1/contracts", body)
+    if not start.get("ok"):
+        return json.dumps(start, ensure_ascii=False, indent=2)
+
+    result = _run_steps(contract_id)
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
