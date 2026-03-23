@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mova-bridge"
+version = "0.3.1"
+description = "MOVA Contract Bridge — MCP client for OpenClaw and Claude Code"
+license = "MIT"
+requires-python = ">=3.11"
+
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+mova-bridge = "mova_bridge.server:main"
+
+[project.urls]
+Homepage = "https://github.com/mova-compact/MOVA_Claw"
+Source = "https://github.com/mova-compact/MOVA_Claw/tree/main/mova-bridge"
+"Bug Tracker" = "https://github.com/mova-compact/MOVA_Claw/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mova_bridge"]
