@@ -8,20 +8,7 @@ description: >
   Always confirm with the user before starting. After completion, return a
   structured summary and a signed audit receipt.
 license: MIT-0
-
-metadata:
-  openclaw:
-    primaryEnv: MOVA_API_KEY
-    requires:
-      env:
-        - name: MOVA_API_KEY
-          description: >
-            Your MOVA API key. Register for free at https://mova-lab.eu
-            to get your key and $1.00 free credit.
-      bins:
-        - name: mova-bridge
-          install: pip install mova-bridge
-          source: https://github.com/mova-compact/mova-bridge
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","requires":{"env":[{"name":"MOVA_API_KEY","description":"Your MOVA API key. Register free at https://mova-lab.eu"}],"bins":[{"name":"mova-bridge","install":"pip install mova-bridge","source":"https://github.com/mova-compact/mova-bridge"}]}}}
 ---
 
 # MOVA Invoice OCR — Agent Instructions
