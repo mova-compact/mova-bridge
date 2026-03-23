@@ -454,6 +454,67 @@ _TRADE_STEPS = [
 ]
 
 
+_AML_STEPS = [
+    {
+        "step_id": "analyze",
+        "step_type": "ai_task",
+        "title": "AML Alert Triage Analysis",
+        "next_step_id": "verify",
+        "config": {
+            "model": os.environ.get("LLM_MODEL", "openai/gpt-4o-mini"),
+            "api_key_env": "LLM_KEY",
+            "system_prompt": (
+                "You are an AML compliance analyst performing L1 alert triage. "
+                "Review the alert data and run all connector checks. "
+                "Return ONLY a JSON object with: "
+                "alert_id, triage_decision (false_positive/manual_review/immediate_escalate), "
+                "risk_score_assessment (0-100), "
+                "sanctions_check ({is_sanctioned, list_name}), "
+                "pep_check ({is_pep, pep_category}), "
+                "typology_match ({matched, typology_code, description}), "
+                "customer_risk ({rating, jurisdiction_risk, burst_intensity}), "
+                "anomaly_flags (array), "
+                "findings (array of {code, severity, summary}), "
+                "requires_human_approval (bool), "
+                "recommended_action (clear/escalate_l2/immediate_escalate), "
+                "decision_reasoning (string), "
+                "risk_score (0.0-1.0). "
+                "IMMEDIATE ESCALATE rules: sanctions_match = true OR pep_status = true OR risk_score > 85. "
+                "FALSE POSITIVE criteria: risk_score <= 30 AND no sanctions AND no PEP AND no prior alerts."
+            ),
+        },
+    },
+    {
+        "step_id": "verify",
+        "step_type": "verification",
+        "title": "AML Risk Snapshot",
+        "next_step_id": "decide",
+        "config": {"recommended_action": "review"},
+    },
+    {
+        "step_id": "decide",
+        "step_type": "decision_point",
+        "title": "AML Triage Decision Gate",
+        "config": {
+            "decision_kind": "aml_triage",
+            "question": "AML L1 triage complete. Select compliance decision:",
+            "required_actor": {"actor_type": "human"},
+            "options": [
+                {"option_id": "clear",              "label": "Clear — false positive"},
+                {"option_id": "escalate_l2",        "label": "Escalate to L2 analyst"},
+                {"option_id": "immediate_escalate", "label": "Immediate escalation — freeze account"},
+            ],
+            "route_map": {
+                "clear":              "__end__",
+                "escalate_l2":        "__end__",
+                "immediate_escalate": "__end__",
+                "_default":           "__end__",
+            },
+        },
+    },
+]
+
+
 def _hitl_post(path: str, body: dict, timeout: int = 180) -> Any:
     try:
         r = _client.post(
@@ -482,6 +543,7 @@ def _hitl_get(path: str, timeout: int = 30) -> Any:
 def _run_steps(contract_id: str) -> dict:
     """Execute analyze → verify → decide steps in sequence.
     Returns final status dict. Stops early if waiting_human."""
+    analysis: dict = {}
     for step_id in ["analyze", "verify", "decide"]:
         result = _hitl_post(
             f"/api/v1/contracts/{contract_id}/step",
@@ -495,12 +557,19 @@ def _run_steps(contract_id: str) -> dict:
         )
         if not result.get("ok"):
             return result
+        # Capture analyze output for display in waiting_human response
+        if step_id == "analyze":
+            raw = _hitl_get(f"/api/v1/contracts/{contract_id}/steps/analyze/output")
+            if raw.get("ok") is not False:
+                analysis = raw
+            else:
+                analysis = {}
         status = result.get("status", "")
         if status == "waiting_human":
             # Get decision point details
             dp_resp = _hitl_get(f"/api/v1/contracts/{contract_id}/decision")
             dp = dp_resp.get("decision_point", {})
-            return {
+            resp: dict = {
                 "ok": True,
                 "status": "waiting_human",
                 "contract_id": contract_id,
@@ -508,15 +577,21 @@ def _run_steps(contract_id: str) -> dict:
                 "options": dp.get("options", []),
                 "recommended": dp.get("recommended_option_id"),
             }
+            if analysis:
+                resp["analysis"] = analysis
+            return resp
     # All steps done — return audit
     audit = _hitl_get(f"/api/v1/contracts/{contract_id}/audit")
     receipt = audit.get("audit_receipt", {})
-    return {
+    resp = {
         "ok": True,
         "status": "completed",
         "contract_id": contract_id,
         "audit_receipt": receipt,
     }
+    if analysis:
+        resp["analysis"] = analysis
+    return resp
 
 
 # ── HITL MCP tools ─────────────────────────────────────────────────────────────
@@ -633,6 +708,39 @@ def mova_hitl_audit(contract_id: str) -> str:
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
+@mcp.tool(name="mova_hitl_audit_compact")
+def mova_hitl_audit_compact(contract_id: str) -> str:
+    """Get the expanded MOVA compact audit journal for a completed contract.
+
+    Returns the sidecar.jsonl telemetry — a chronological log of every event
+    in the contract lifecycle with full metadata (timestamps, actor, step, payload).
+    Use this when the user asks to see the full audit journal or execution log.
+
+    Args:
+        contract_id: Contract ID from mova_hitl_start / mova_hitl_start_po / mova_hitl_start_trade.
+    """
+    try:
+        r = _client.get(
+            f"{_api_url()}/api/v1/contracts/{contract_id}/audit/compact/sidecar.jsonl",
+            headers=_headers(),
+            timeout=30,
+        )
+        if r.status_code == 404:
+            return json.dumps({"ok": False, "error": "Compact audit not found. Contract may still be running."})
+        if r.status_code != 200:
+            return json.dumps({"ok": False, "error": f"HTTP {r.status_code}"})
+        lines = [ln for ln in r.text.strip().splitlines() if ln.strip()]
+        events = []
+        for ln in lines:
+            try:
+                events.append(json.loads(ln))
+            except Exception:
+                pass
+        return json.dumps({"ok": True, "contract_id": contract_id, "events": events}, ensure_ascii=False, indent=2)
+    except ValueError as e:
+        return json.dumps({"ok": False, "error": str(e)})
+
+
 @mcp.tool(name="mova_hitl_start_po")
 def mova_hitl_start_po(po_id: str, approver_employee_id: str = "") -> str:
     """Start a HITL purchase order approval contract (risk analysis → human decision).
@@ -743,6 +851,83 @@ def mova_hitl_start_trade(
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
+@mcp.tool(name="mova_hitl_start_aml")
+def mova_hitl_start_aml(
+    alert_id: str,
+    rule_id: str,
+    rule_description: str,
+    risk_score: int,
+    customer_id: str,
+    customer_name: str,
+    customer_risk_rating: str,
+    customer_type: str,
+    customer_jurisdiction: str,
+    triggered_transactions: str,
+    pep_status: bool = False,
+    sanctions_match: bool = False,
+    historical_alerts: str = "[]",
+) -> str:
+    """Start a HITL AML alert triage contract (L1 analysis → human decision).
+
+    Call this when the user wants to triage an AML monitoring alert.
+
+    Args:
+        alert_id: Alert ID from the transaction monitoring system (e.g. "ALERT-1002").
+        rule_id: Monitoring rule that triggered the alert (e.g. "TM-STRUCT-11").
+        rule_description: Human-readable rule description.
+        risk_score: Alert risk score 0-100 from the TM system.
+        customer_id: Customer ID in the core banking system.
+        customer_name: Customer full name or legal name.
+        customer_risk_rating: Customer risk rating: "low", "medium", "high".
+        customer_type: "individual" or "business".
+        customer_jurisdiction: ISO country code (e.g. "DE", "RU", "IR").
+        triggered_transactions: JSON array of triggered transactions [{transaction_id, amount_eur}].
+        pep_status: True if customer is a Politically Exposed Person.
+        sanctions_match: True if customer matches a sanctions list.
+        historical_alerts: JSON array of prior alert IDs for this customer.
+
+    Returns JSON. If status is "waiting_human" — show AI triage analysis and ask analyst to choose:
+    clear / escalate_l2 / immediate_escalate. Then call mova_hitl_decide.
+    """
+    contract_id = f"ctr-aml-{uuid.uuid4().hex[:8]}"
+
+    body = {
+        "envelope": {
+            "kind": "env.contract.start_v0",
+            "envelope_id": f"env-{uuid.uuid4().hex[:8]}",
+            "contract_id": contract_id,
+            "actor": {"actor_type": "human", "actor_id": "user"},
+            "payload": {
+                "template_id": "tpl.aml.alert_triage_hitl_v0",
+                "policy_profile_ref": "policy.hitl.aml.alert_triage_v0",
+                "initial_inputs": [
+                    {"key": "alert_id",               "value": alert_id},
+                    {"key": "rule_id",                "value": rule_id},
+                    {"key": "rule_description",       "value": rule_description},
+                    {"key": "risk_score",             "value": str(risk_score)},
+                    {"key": "customer_id",            "value": customer_id},
+                    {"key": "customer_name",          "value": customer_name},
+                    {"key": "customer_risk_rating",   "value": customer_risk_rating},
+                    {"key": "customer_type",          "value": customer_type},
+                    {"key": "customer_jurisdiction",  "value": customer_jurisdiction},
+                    {"key": "triggered_transactions", "value": triggered_transactions},
+                    {"key": "pep_status",             "value": str(pep_status).lower()},
+                    {"key": "sanctions_match",        "value": str(sanctions_match).lower()},
+                    {"key": "historical_alerts",      "value": historical_alerts},
+                ],
+            },
+        },
+        "steps": _AML_STEPS,
+    }
+
+    start = _hitl_post("/api/v1/contracts", body)
+    if not start.get("ok"):
+        return json.dumps(start, ensure_ascii=False, indent=2)
+
+    result = _run_steps(contract_id)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
 # ── CLI call mode ──────────────────────────────────────────────────────────────
 
 def _cli_call(args: list[str]) -> None:
@@ -767,13 +952,43 @@ def _cli_call(args: list[str]) -> None:
             i += 1
 
     dispatch = {
-        "mova_hitl_start":  lambda: mova_hitl_start(**kwargs),
-        "mova_hitl_decide": lambda: mova_hitl_decide(**kwargs),
-        "mova_hitl_status": lambda: mova_hitl_status(**kwargs),
-        "mova_hitl_audit":  lambda: mova_hitl_audit(**kwargs),
-        "mova_execute":     lambda: mova_execute(kwargs.get("contract_id", ""), json.loads(kwargs.get("inputs", "{}"))),
-        "mova_list_contracts": lambda: mova_list_contracts(),
-        "mova_usage":       lambda: mova_usage(),
+        "mova_hitl_start":         lambda: mova_hitl_start(**kwargs),
+        "mova_hitl_start_po":      lambda: mova_hitl_start_po(
+            po_id=kwargs["po_id"],
+            approver_employee_id=kwargs.get("approver_employee_id", ""),
+        ),
+        "mova_hitl_start_trade":   lambda: mova_hitl_start_trade(
+            trade_id=kwargs["trade_id"],
+            wallet_address=kwargs["wallet_address"],
+            chain=kwargs["chain"],
+            token_pair=kwargs["token_pair"],
+            side=kwargs["side"],
+            order_type=kwargs["order_type"],
+            order_size_usd=float(kwargs["order_size_usd"]),
+            leverage=float(kwargs.get("leverage", 1.0)),
+        ),
+        "mova_hitl_start_aml":     lambda: mova_hitl_start_aml(
+            alert_id=kwargs["alert_id"],
+            rule_id=kwargs["rule_id"],
+            rule_description=kwargs.get("rule_description", ""),
+            risk_score=int(kwargs.get("risk_score", 0)),
+            customer_id=kwargs["customer_id"],
+            customer_name=kwargs.get("customer_name", ""),
+            customer_risk_rating=kwargs.get("customer_risk_rating", "medium"),
+            customer_type=kwargs.get("customer_type", "business"),
+            customer_jurisdiction=kwargs.get("customer_jurisdiction", ""),
+            triggered_transactions=kwargs.get("triggered_transactions", "[]"),
+            pep_status=kwargs.get("pep_status", "false").lower() == "true",
+            sanctions_match=kwargs.get("sanctions_match", "false").lower() == "true",
+            historical_alerts=kwargs.get("historical_alerts", "[]"),
+        ),
+        "mova_hitl_decide":        lambda: mova_hitl_decide(**kwargs),
+        "mova_hitl_status":        lambda: mova_hitl_status(**kwargs),
+        "mova_hitl_audit":         lambda: mova_hitl_audit(**kwargs),
+        "mova_hitl_audit_compact": lambda: mova_hitl_audit_compact(contract_id=kwargs["contract_id"]),
+        "mova_execute":            lambda: mova_execute(kwargs.get("contract_id", ""), json.loads(kwargs.get("inputs", "{}"))),
+        "mova_list_contracts":     lambda: mova_list_contracts(),
+        "mova_usage":              lambda: mova_usage(),
     }
 
     fn = dispatch.get(tool_name)
