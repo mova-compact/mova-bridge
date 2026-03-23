@@ -21,7 +21,7 @@ metadata:
       bins:
         - name: mova-bridge
           install: pip install mova-bridge
-          source: https://github.com/mova-compact/MOVA_Claw/tree/main/mova-bridge
+          source: https://github.com/mova-compact/mova-bridge
 ---
 
 # MOVA Invoice OCR — Agent Instructions
