@@ -2,7 +2,7 @@
 name: mova-crypto-review
 description: Submit a crypto trade order for automated risk analysis and human-in-the-loop review via MOVA. Trigger when the user mentions a trade order, wallet address, token pair, or asks to review/approve a crypto trade. Mandatory human escalation for orders above $10,000 or leverage above 3x.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","envVars":[{"name":"MOVA_API_KEY","description":"MOVA platform API key — obtain at https://mova-lab.eu/register","required":true}],"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"trade ID, wallet address, chain, token pair, order size, leverage, AI analysis results, human decision, audit metadata"},{"service":"Market data connector (read-only)","data":"token pair for price and volatility lookup"},{"service":"Sanctions screening connector (read-only)","data":"wallet address screened against OFAC, EU, UN lists"}],"binaryProvenance":{"name":"mova-bridge","installCmd":"pip install mova-bridge","source":"https://pypi.org/project/mova-bridge/","sourceRepo":"https://github.com/mova-compact/mova-bridge","license":"MIT-0"}}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install ~/mova-plugin/openclaw-plugin","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"trade ID, wallet address, chain, token pair, order size, leverage, AI analysis results, human decision, audit metadata"},{"service":"Market data connector (read-only)","data":"token pair for price and volatility lookup"},{"service":"Sanctions screening connector (read-only)","data":"wallet address screened against OFAC, EU, UN lists"}]}}
 ---
 
 # MOVA Crypto Trade Review
@@ -23,13 +23,7 @@ Submit a crypto trade order to MOVA for automated risk analysis and a mandatory 
 
 ## Requirements
 
-**Binary:** `mova-bridge` CLI — install once:
-```
-pip install mova-bridge
-```
-Source: [PyPI](https://pypi.org/project/mova-bridge/) · [GitHub](https://github.com/mova-compact/mova-bridge) · License: MIT-0
-
-**Credential:** Set `MOVA_API_KEY` in your OpenClaw environment (Settings → Environment Variables).
+**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
 Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 
 **Data flows:**
@@ -47,8 +41,6 @@ Say "review trade TRD-2026-0002: buy $25,000 BTC/USDT on ethereum":
 https://raw.githubusercontent.com/mova-compact/mova-bridge/main/test_trade_TRD-2026-0002.png
 ```
 
-The agent submits it to MOVA, shows the AI risk analysis with sanctions check, balance, and anomaly flags, then asks for your decision.
-
 ## Demo
 
 **Step 1 — Task submitted with trade document (RISK GATE REQUIRED)**
@@ -62,12 +54,10 @@ The agent submits it to MOVA, shows the AI risk analysis with sanctions check, b
 
 ## Why contract execution matters
 
-A standard AI agent checks the trade and gives you an opinion. MOVA does something different:
-
-- **Policy is law, not a suggestion** — orders above $10,000 cannot be auto-approved regardless of risk score. The policy gate is enforced at the runtime level, not in a prompt
-- **Sanctions screening is mandatory** — every wallet is checked against OFAC, EU, and UN lists before any decision is presented to the user
-- **Immutable audit trail** — the compact journal records every event (sanctions check, risk analysis, human decision) with cryptographic proof. When a compliance officer asks "who escalated trade TRD-2026-0002 and why?" — the answer is in the system with an exact timestamp and reason
-- **MiCA / EU AI Act ready** — high-value crypto transactions require human oversight and full explainability. MOVA provides both by design
+- **Policy is law, not a suggestion** — orders above $10,000 cannot be auto-approved regardless of risk score
+- **Sanctions screening is mandatory** — every wallet is checked against OFAC, EU, and UN lists before any decision
+- **Immutable audit trail** — when a compliance officer asks "who escalated trade TRD-2026-0002 and why?" — the answer is in the system
+- **MiCA / EU AI Act ready** — high-value crypto transactions require human oversight and full explainability
 
 ## What the user receives
 
@@ -98,7 +88,10 @@ If details are missing — ask once for: trade ID, wallet address, chain, token 
 
 ## Step 1 — Submit trade order
 
-    mova-bridge call mova_hitl_start_trade --trade-id TRD-2026-0001 --wallet-address 0xABC123... --chain ethereum --token-pair BTC/USDT --side buy --order-type market --order-size-usd 25000 --leverage 1
+Call tool `mova_hitl_start_trade` with:
+- `trade_id`, `wallet_address`, `chain`, `token_pair`
+- `side` (buy/sell), `order_type` (market/limit/stop)
+- `order_size_usd`, `leverage`
 
 ## Step 2 — Show analysis and decision options
 
@@ -110,24 +103,21 @@ If `status = "waiting_human"` — show risk summary and ask to choose:
 
 Show `recommended` option if present (mark ← RECOMMENDED).
 
-Then run:
-
-    mova-bridge call mova_hitl_decide --contract-id CONTRACT_ID --option OPTION --reason "REASON"
-
-Use CONTRACT_ID from the JSON response — not the trade ID.
+Call tool `mova_hitl_decide` with:
+- `contract_id`: from the response above (NOT the trade ID)
+- `option`: chosen decision
+- `reason`: human reasoning
 
 ## Step 3 — Show audit receipt
 
-    mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
+Call tool `mova_hitl_audit` with `contract_id`.
+Call tool `mova_hitl_audit_compact` with `contract_id` for the full signed event chain.
 
 ## Connect your real market data and custody systems
 
-By default MOVA uses a sandbox mock for all connector calls. To route checks against your live trading infrastructure, register your endpoints — see the **MOVA Connector Setup** skill or run:
+By default MOVA uses a sandbox mock. To route checks against your live trading infrastructure, call `mova_list_connectors` with `keyword: "market"`.
 
-    mova-bridge call mova_list_connectors --keyword market
-
-Relevant connectors for this skill:
+Relevant connectors:
 
 | Connector ID | What it covers |
 |---|---|
@@ -136,19 +126,11 @@ Relevant connectors for this skill:
 | `connector.market.portfolio_risk_v1` | Portfolio VaR, concentration, leverage |
 | `connector.screening.pep_sanctions_v1` | Wallet sanctions screening (OFAC, EU, UN) |
 
-Register an endpoint:
-
-    mova-bridge call mova_register_connector \
-      --connector-id connector.market.price_feed_v1 \
-      --endpoint https://your-exchange.example.com/api/price \
-      --label "Production Price Feed" \
-      --auth-header X-Api-Key --auth-value YOUR_KEY
-
-All contracts in your org will use your endpoint instead of the mock immediately.
+Call `mova_register_connector` with `connector_id`, `endpoint`, optional `auth_header` and `auth_value`.
 
 ## Rules
 
 - NEVER make HTTP requests manually
-- NEVER invent or simulate results — if exec fails, show the exact error
-- Run exec directly: `mova-bridge call ...` (not wrapped in bash or sh)
-- CONTRACT_ID comes from the mova-bridge JSON response, not from the trade ID
+- NEVER invent or simulate results — if a tool call fails, show the exact error
+- Use MOVA plugin tools directly — do NOT use exec or shell
+- CONTRACT_ID comes from the mova_hitl_start_trade response, not from the trade ID

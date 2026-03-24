@@ -2,7 +2,7 @@
 name: mova-po-approval
 description: Submit a purchase order for automated risk analysis and procurement approval via MOVA HITL. Trigger when the user mentions a PO number, asks to approve/review a purchase order, or says anything like "check this PO", "approve purchase order", "PO review", "procurement approval".
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","envVars":[{"name":"MOVA_API_KEY","description":"MOVA platform API key — obtain at https://mova-lab.eu/register","required":true}],"erpConnector":{"description":"ERP vendor/budget/authority data is fetched server-side by the MOVA runtime using your account credentials. No additional ERP credentials are required on the agent side — all ERP lookups are performed by the MOVA platform under your MOVA_API_KEY.","requiredClientConfig":"none"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"PO ID, approver employee ID, AI analysis results, human decision, audit metadata"},{"service":"ERP connector (server-side, read-only)","data":"PO fields, vendor registry, budget data, authority matrix — accessed by MOVA runtime, not by the agent"}],"binaryProvenance":{"name":"mova-bridge","installCmd":"pip install mova-bridge","source":"https://pypi.org/project/mova-bridge/","sourceRepo":"https://github.com/mova-compact/mova-bridge","license":"MIT-0"}}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install ~/mova-plugin/openclaw-plugin","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"PO ID, approver employee ID, AI analysis results, human decision, audit metadata"},{"service":"ERP connector (server-side, read-only)","data":"PO fields, vendor registry, budget data, authority matrix — accessed by MOVA runtime, not by the agent"}]}}
 ---
 
 # MOVA Purchase Order Approval
@@ -18,28 +18,16 @@ Submit a purchase order to MOVA for automated risk analysis and a human decision
 
 ## Requirements
 
-**Binary:** `mova-bridge` CLI — install once:
-```
-pip install mova-bridge
-```
-Source: [PyPI](https://pypi.org/project/mova-bridge/) · [GitHub](https://github.com/mova-compact/mova-bridge) · License: MIT-0
-
-**Credential:** Set `MOVA_API_KEY` in your OpenClaw environment (Settings → Environment Variables).
+**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
 Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 
-**Credential required:**
-
-| Variable | Required | Description |
-|---|---|---|
-| `MOVA_API_KEY` | ✅ Yes | MOVA platform API key — the only credential needed |
-
 **ERP connector — no additional credentials required:**
-Vendor registry, budget data, and authority matrix are fetched server-side by the MOVA runtime under your `MOVA_API_KEY`. The agent does not need separate ERP credentials, config paths, or service accounts. All ERP lookups happen inside the MOVA platform, not on your machine.
+Vendor registry, budget data, and authority matrix are fetched server-side by the MOVA runtime. The agent does not need separate ERP credentials.
 
 **Data flows:**
 - PO ID + approver ID → `api.mova-lab.eu` (MOVA platform, EU-hosted)
 - ERP data (vendor/budget/authority) → fetched by MOVA runtime server-side, read-only, not stored
-- Audit journal → MOVA R2 storage, signed, accessible only via your `MOVA_API_KEY`
+- Audit journal → MOVA R2 storage, signed, accessible only via your API key
 - No data sent to third parties beyond the above
 
 ## Quick start
@@ -65,12 +53,10 @@ The agent submits it to MOVA, shows the AI risk analysis with findings and anoma
 
 ## Why contract execution matters
 
-A standard AI agent checks the PO and suggests a decision. MOVA does something different:
-
 - **Split-PO fraud detection** — policy enforces escalation when the same vendor submits multiple POs within 72h to bypass approval thresholds
 - **Authority enforcement** — the approver's authority level is validated against the authority matrix; inadequate authority always routes to escalation
-- **Immutable audit trail** — the compact journal records every event (risk analysis, anomaly detection, human decision) with cryptographic proof. When an auditor asks "who escalated PO-2026-004 and why?" — the answer is in the system with an exact timestamp and reason
-- **EU AI Act / DORA ready** — procurement decisions are high-risk financial actions requiring human oversight and full explainability. MOVA provides both by design
+- **Immutable audit trail** — the compact journal records every event with cryptographic proof
+- **EU AI Act / DORA ready** — procurement decisions are high-risk financial actions requiring human oversight and full explainability
 
 ## What the user receives
 
@@ -82,7 +68,7 @@ A standard AI agent checks the PO and suggests a decision. MOVA does something d
 | Anomaly flags | split_po_pattern, unregistered_vendor, budget_exceedance, unverified_approver |
 | Findings | Structured list with severity codes (F001, F002…) |
 | Risk score | 0.0 (clean) – 1.0 (high risk) |
-| Recommended action | AI-suggested decision (hold / escalate / approve) |
+| Recommended action | AI-suggested decision |
 | Decision options | approve / hold / reject / escalate |
 | Audit receipt ID | Permanent signed record of the procurement decision |
 | Compact journal | Full event log: analysis → snapshot → human decision |
@@ -98,7 +84,9 @@ Activate when the user:
 
 ## Step 1 — Submit PO
 
-    mova-bridge call mova_hitl_start_po --po-id PO-2026-001 --approver-employee-id EMP-1042
+Call tool `mova_hitl_start_po` with:
+- `po_id`: PO number (e.g. PO-2026-001)
+- `approver_employee_id`: HR employee ID (e.g. EMP-1042)
 
 ## Step 2 — Show analysis and decision options
 
@@ -111,24 +99,21 @@ If `status = "waiting_human"` — show risk summary and ask to choose:
 
 Show `recommended` option if present (mark ← RECOMMENDED).
 
-Then run:
-
-    mova-bridge call mova_hitl_decide --contract-id CONTRACT_ID --option OPTION --reason "REASON"
-
-Use CONTRACT_ID from the JSON response — not the PO number.
+Call tool `mova_hitl_decide` with:
+- `contract_id`: from the response above (NOT the PO number)
+- `option`: chosen decision
+- `reason`: human reasoning
 
 ## Step 3 — Show audit receipt
 
-    mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
+Call tool `mova_hitl_audit` with `contract_id`.
+Call tool `mova_hitl_audit_compact` with `contract_id` for the full signed event chain.
 
 ## Connect your real ERP systems
 
-By default MOVA uses a sandbox mock for all connector calls. To route procurement checks against your live ERP, register your endpoints — see the **MOVA Connector Setup** skill or run:
+By default MOVA uses a sandbox mock. To route procurement checks against your live ERP, call `mova_list_connectors` with `keyword: "erp"`.
 
-    mova-bridge call mova_list_connectors --keyword erp
-
-Relevant connectors for this skill:
+Relevant connectors:
 
 | Connector ID | What it covers |
 |---|---|
@@ -137,19 +122,11 @@ Relevant connectors for this skill:
 | `connector.erp.budget_check_v1` | Budget availability and utilisation |
 | `connector.erp.hr_employee_v1` | Approver authority level from HR |
 
-Register an endpoint:
-
-    mova-bridge call mova_register_connector \
-      --connector-id connector.erp.po_lookup_v1 \
-      --endpoint https://your-erp.example.com/api/po/lookup \
-      --label "Production ERP" \
-      --auth-header X-Api-Key --auth-value YOUR_KEY
-
-All contracts in your org will use your endpoint instead of the mock immediately.
+Call `mova_register_connector` with `connector_id`, `endpoint`, optional `auth_header` and `auth_value`.
 
 ## Rules
 
 - NEVER make HTTP requests manually
-- NEVER invent or simulate results — if exec fails, show the exact error
-- Run exec directly: `mova-bridge call ...` (not wrapped in bash or sh)
-- CONTRACT_ID comes from the mova-bridge JSON response, not from the PO number
+- NEVER invent or simulate results — if a tool call fails, show the exact error
+- Use MOVA plugin tools directly — do NOT use exec or shell
+- CONTRACT_ID comes from the mova_hitl_start_po response, not from the PO number

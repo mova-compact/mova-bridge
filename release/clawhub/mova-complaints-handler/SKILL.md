@@ -2,7 +2,7 @@
 name: mova-complaints-handler
 description: Submit a customer complaint for EU-compliant AI classification and human-in-the-loop handling decision via MOVA. Handles compensation claims, regulator threats, fraud signals, and repeat customer cases with mandatory human review and a full signed audit trail.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","requiredBins":["mova-bridge"],"installDocs":"https://github.com/mova-compact/mova-bridge","dataFlows":["complaint text → MOVA Classification API","decision → MOVA Audit Journal (immutable)"]}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install ~/mova-plugin/openclaw-plugin","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"complaint text, customer ID, product category, prior complaints, human decision, audit metadata"}]}}
 ---
 
 # MOVA EU Consumer Complaints Handler
@@ -18,36 +18,37 @@ Turn any customer complaint into a structured, auditable handling decision — w
 
 ## Requirements
 
-| Requirement | Details |
-|---|---|
-| Binary | `mova-bridge` CLI — install: `pip install mova-bridge` |
-| Credential | `MOVA_API_KEY` — set in OpenClaw agent environment |
-| Account | Free at [mova-compact/mova-bridge](https://github.com/mova-compact/mova-bridge) |
+**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
+Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 
 ## Quick start
 
-```
-pip install mova-bridge
-export MOVA_API_KEY=your_key_here
-```
-
-Then tell your agent:
+Tell your agent:
 > "Handle complaint CMP-2026-1002 from customer CUST-992 — product: investments, text: 'I want compensation for unauthorized charges and will escalate to the regulator.', prior complaints: CMP-0501, CMP-0604"
+
+## Demo
+
+![Complaint input](screenshots/01-input.jpg)
+![AI classification & decision options](screenshots/02-analysis.jpg)
+![Audit receipt & compact log](screenshots/03-audit.jpg)
+
+## Test complaint
+
+[test_complaint_CMP-2026-1002.png](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/test_complaint_CMP-2026-1002.png)
 
 ## What the agent does
 
 **Step 1 — Submit complaint**
 
-```
-mova-bridge call mova_hitl_start_complaint \
-  --complaint-id CMP-2026-1002 \
-  --customer-id CUST-992 \
-  --complaint-text "..." \
-  --channel phone \
-  --product-category investments \
-  --complaint-date 2026-03-20 \
-  --previous-complaints '["CMP-2026-0501","CMP-2026-0604"]'
-```
+Call tool `mova_hitl_start_complaint` with:
+- `complaint_id` (e.g. CMP-2026-1002), `customer_id`
+- `complaint_text`, `channel` (web/email/phone/chat/branch)
+- `product_category` (e.g. payments, investments, mortgage)
+- `complaint_date` (ISO date)
+- `previous_complaints`: optional array of prior complaint IDs
+- `attachments`: optional array of filenames
+- `customer_segment`: optional (retail/sme/corporate)
+- `preferred_language`: optional ISO 639-1 code
 
 **Step 2 — AI analysis output**
 
@@ -60,8 +61,7 @@ Findings:
   • COMP_CLAIM (high)           — Customer requests compensation for unauthorized charges
   • REGULATOR_THREAT (medium)   — Customer threatens regulator escalation
   • PRODUCT_RISK_INVEST (high)  — High-risk product category
-Draft response hint: Acknowledge receipt, confirm investigation, outline compensation
-  process, reassure on regulator concerns
+Draft response hint: Acknowledge receipt, confirm investigation, outline compensation process
 Recommended action: escalate ← RECOMMENDED
 ```
 
@@ -74,19 +74,15 @@ Recommended action: escalate ← RECOMMENDED
 | `reject` | Mark as incomplete / invalid |
 | `regulator_flag` | Flag for regulator reporting |
 
+Call tool `mova_hitl_decide` with:
+- `contract_id`: from the response above — this is `ctr-cmp-xxxxxxxx`, NOT the complaint ID
+- `option`: chosen decision
+- `reason`: officer reasoning
+
 **Step 4 — Audit receipt**
 
-```
-✅ Complaint CMP-2026-1002 — ctr-cmp-xxxxxxxx
-
-Decision:      escalate
-Audit receipt: aud-xxxxxxxx
-```
-
-Full immutable log available via:
-```
-mova-bridge call mova_hitl_audit_compact --contract-id ctr-cmp-xxxxxxxx
-```
+Call tool `mova_hitl_audit` with `contract_id`.
+Call tool `mova_hitl_audit_compact` with `contract_id` for the full signed event chain.
 
 ## Audit log format (compact)
 
@@ -99,16 +95,6 @@ mova-bridge call mova_hitl_audit_compact --contract-id ctr-cmp-xxxxxxxx
 | 5 | decision.human | Officer selected option + reason |
 | 0 | meta | Contract finalized, status: completed |
 
-## Demo
-
-![Complaint input](screenshots/01-input.jpg)
-![AI classification & decision options](screenshots/02-analysis.jpg)
-![Audit receipt & compact log](screenshots/03-audit.jpg)
-
-## Test complaint
-
-[test_complaint_CMP-2026-1002.png](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/test_complaint_CMP-2026-1002.png)
-
 ## Data flows
 
 - Complaint text and metadata → MOVA Classification API (EU-hosted)
@@ -117,11 +103,9 @@ mova-bridge call mova_hitl_audit_compact --contract-id ctr-cmp-xxxxxxxx
 
 ## Connect your real CRM and policy systems
 
-By default MOVA uses a sandbox mock for all connector calls. To route checks against your live CRM and policy engine, register your endpoints — see the **MOVA Connector Setup** skill or run:
+By default MOVA uses a sandbox mock. To route checks against your live CRM and policy engine, call `mova_list_connectors` with `keyword: "crm"`.
 
-    mova-bridge call mova_list_connectors --keyword crm
-
-Relevant connectors for this skill:
+Relevant connectors:
 
 | Connector ID | What it covers |
 |---|---|
@@ -129,18 +113,11 @@ Relevant connectors for this skill:
 | `connector.policy.complaints_rules_v1` | Complaints handling rules by product/jurisdiction |
 | `connector.notification.email_v1` | Customer notification email |
 
-Register an endpoint:
-
-    mova-bridge call mova_register_connector \
-      --connector-id connector.crm.customer_lookup_v1 \
-      --endpoint https://your-crm.example.com/api/customers \
-      --label "Production CRM" \
-      --auth-header Authorization --auth-value "Bearer YOUR_TOKEN"
-
-All contracts in your org will use your endpoint instead of the mock immediately.
+Call `mova_register_connector` with `connector_id`, `endpoint`, optional `auth_header` and `auth_value`.
 
 ## Rules
 
 - Agent never makes HTTP requests directly
-- Agent never invents or simulates results
-- Exec runs `mova-bridge call ...` directly — never wrapped in bash
+- Agent never invents or simulates results — if a tool call fails, show the exact error
+- Use MOVA plugin tools directly — do NOT use exec or shell
+- CONTRACT_ID is `ctr-cmp-xxxxxxxx` from the mova_hitl_start_complaint response — NOT the complaint ID

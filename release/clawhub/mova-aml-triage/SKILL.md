@@ -2,7 +2,7 @@
 name: mova-aml-triage
 description: Submit an AML transaction monitoring alert for automated L1 triage and human-in-the-loop compliance decision via MOVA. Trigger when the user mentions an AML alert, transaction monitoring alert ID, or asks to triage/review a suspicious transaction alert. Mandatory human escalation on sanctions hit, PEP flag, or risk score above 85.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","envVars":[{"name":"MOVA_API_KEY","description":"MOVA platform API key — obtain at https://mova-lab.eu/register","required":true}],"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"alert ID, rule ID, risk score, customer data, transaction list, PEP/sanctions flags, human decision, audit metadata"},{"service":"Sanctions screening connector (read-only)","data":"customer ID and transaction data screened against OFAC, EU, UN lists"},{"service":"Customer risk connector (read-only)","data":"customer ID for risk rating and prior alert history lookup"}],"binaryProvenance":{"name":"mova-bridge","installCmd":"pip install mova-bridge","source":"https://pypi.org/project/mova-bridge/","sourceRepo":"https://github.com/mova-compact/mova-bridge","license":"MIT-0"}}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install ~/mova-plugin/openclaw-plugin","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"alert ID, rule ID, risk score, customer data, transaction list, PEP/sanctions flags, human decision, audit metadata"},{"service":"Sanctions screening connector (read-only)","data":"customer ID and transaction data screened against OFAC, EU, UN lists"},{"service":"Customer risk connector (read-only)","data":"customer ID for risk rating and prior alert history lookup"}]}}
 ---
 
 # MOVA AML Alert Triage
@@ -23,13 +23,7 @@ Submit a transaction monitoring alert to MOVA for automated L1 triage — with t
 
 ## Requirements
 
-**Binary:** `mova-bridge` CLI — install once:
-```
-pip install mova-bridge
-```
-Source: [PyPI](https://pypi.org/project/mova-bridge/) · [GitHub](https://github.com/mova-compact/mova-bridge) · License: MIT-0
-
-**Credential:** Set `MOVA_API_KEY` in your OpenClaw environment (Settings → Environment Variables).
+**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
 Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 
 **Data flows:**
@@ -47,8 +41,6 @@ Say "triage AML alert ALERT-1002" and provide the alert details:
 https://raw.githubusercontent.com/mova-compact/mova-bridge/main/test_aml_ALERT-1002.png
 ```
 
-The agent submits the alert to MOVA, runs L1 triage with typology matching and sanctions screening, then asks the compliance analyst for a decision.
-
 ## Demo
 
 **Step 1 — Alert submitted: TM-STRUCT-11, risk 91, RISK HIGH flag**
@@ -62,12 +54,10 @@ The agent submits the alert to MOVA, runs L1 triage with typology matching and s
 
 ## Why contract execution matters
 
-A standard AI agent checks the alert and gives you a recommendation. MOVA does something different:
-
-- **Escalation rules are policy, not prompts** — risk_score > 85 and sanctions hits trigger mandatory gates that cannot be bypassed, regardless of what the AI recommends
-- **Full typology matching** — AI identifies structuring, layering, and smurfing patterns against your transaction monitoring rules, not generic text
-- **Immutable audit trail** — the compact journal records every event (sanctions check, typology match, human decision) with cryptographic proof. When a regulator asks "who cleared or escalated ALERT-1002 and why?" — the answer is in the system with an exact timestamp and reason
-- **AMLD6 / FATF ready** — AML decisions are high-risk compliance actions. MOVA provides the human oversight, full explainability, and documented decision chain required by AMLD6 and FATF guidance
+- **Escalation rules are policy, not prompts** — risk_score > 85 and sanctions hits trigger mandatory gates that cannot be bypassed
+- **Full typology matching** — AI identifies structuring, layering, and smurfing patterns against your transaction monitoring rules
+- **Immutable audit trail** — when a regulator asks "who cleared or escalated ALERT-1002 and why?" — the answer is in the system with an exact timestamp and reason
+- **AMLD6 / FATF ready** — AML decisions require the human oversight, full explainability, and documented decision chain required by AMLD6 and FATF guidance
 
 ## What the user receives
 
@@ -99,7 +89,12 @@ If details are missing — ask once for: alert ID, rule ID, risk score, customer
 
 ## Step 1 — Submit alert
 
-    mova-bridge call mova_hitl_start_aml --alert-id ALERT-1002 --rule-id TM-STRUCT-11 --rule-description "Multiple rapid transfers to new beneficiary" --risk-score 91 --customer-id CUST-78 --customer-name "Atlas Trading GmbH" --customer-risk-rating high --customer-type business --customer-jurisdiction DE --triggered-transactions '[{"transaction_id":"TX-11","amount_eur":900}]' --pep-status false --sanctions-match false --historical-alerts '["A1","A2","A3"]'
+Call tool `mova_hitl_start_aml` with:
+- `alert_id`, `rule_id`, `rule_description`, `risk_score`
+- `customer_id`, `customer_name`, `customer_risk_rating` (low/medium/high), `customer_type` (individual/business), `customer_jurisdiction` (ISO country code)
+- `triggered_transactions`: array of `{transaction_id, amount_eur}`
+- `pep_status`: boolean, `sanctions_match`: boolean
+- `historical_alerts`: optional array of prior alert IDs
 
 ## Step 2 — Show analysis and decision options
 
@@ -111,24 +106,21 @@ If `status = "waiting_human"` — show AI triage summary and ask to choose:
 
 Show `recommended` option if present (mark ← RECOMMENDED).
 
-Then run:
-
-    mova-bridge call mova_hitl_decide --contract-id CONTRACT_ID --option OPTION --reason "REASON"
-
-Use CONTRACT_ID from the JSON response — not the alert ID.
+Call tool `mova_hitl_decide` with:
+- `contract_id`: from the response above (NOT the alert ID)
+- `option`: chosen decision
+- `reason`: analyst reasoning
 
 ## Step 3 — Show audit receipt
 
-    mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
+Call tool `mova_hitl_audit` with `contract_id`.
+Call tool `mova_hitl_audit_compact` with `contract_id` for the full signed event chain.
 
 ## Connect your real AML systems
 
-By default MOVA uses a sandbox mock for all connector calls. To route checks against your live infrastructure, register your endpoints — see the **MOVA Connector Setup** skill or run:
+By default MOVA uses a sandbox mock. To route checks against your live infrastructure, call `mova_list_connectors` with `keyword: "aml"`.
 
-    mova-bridge call mova_list_connectors --keyword aml
-
-Relevant connectors for this skill:
+Relevant connectors:
 
 | Connector ID | What it covers |
 |---|---|
@@ -137,19 +129,11 @@ Relevant connectors for this skill:
 | `connector.policy.aml_rules_v1` | AML rule engine / typology rules |
 | `connector.risk.jurisdiction_v1` | Country FATF risk classification |
 
-Register an endpoint:
-
-    mova-bridge call mova_register_connector \
-      --connector-id connector.screening.pep_sanctions_v1 \
-      --endpoint https://your-screening.example.com/api/check \
-      --label "Production Sanctions API" \
-      --auth-header X-Api-Key --auth-value YOUR_KEY
-
-All contracts in your org will use your endpoint instead of the mock immediately.
+Call `mova_register_connector` with `connector_id`, `endpoint`, optional `auth_header` and `auth_value`.
 
 ## Rules
 
 - NEVER make HTTP requests manually
-- NEVER invent or simulate results — if exec fails, show the exact error
-- Run exec directly: `mova-bridge call ...` (not wrapped in bash or sh)
-- CONTRACT_ID comes from the mova-bridge JSON response, not from the alert ID
+- NEVER invent or simulate results — if a tool call fails, show the exact error
+- Use MOVA plugin tools directly — do NOT use exec or shell
+- CONTRACT_ID comes from the mova_hitl_start_aml response, not from the alert ID
