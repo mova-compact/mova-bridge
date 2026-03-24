@@ -4,7 +4,16 @@
   "description": "MOVA HITL tools for OpenClaw — native agent tools for contract-driven business workflows",
   "type": "module",
   "license": "MIT-0",
-  "keywords": ["openclaw", "openclaw-plugin", "mova", "hitl", "aml", "compliance", "invoice", "ocr"],
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "mova",
+    "hitl",
+    "aml",
+    "compliance",
+    "invoice",
+    "ocr"
+  ],
   "homepage": "https://github.com/mova-compact/mova-bridge",
   "repository": {
     "type": "git",
@@ -12,12 +21,13 @@
     "directory": "openclaw-plugin"
   },
   "openclaw": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./dist/index.js"
+    ]
   },
   "files": [
-    "src",
-    "openclaw.plugin.json",
-    "tsconfig.json"
+    "dist",
+    "openclaw.plugin.json"
   ],
   "dependencies": {
     "@sinclair/typebox": "^0.33.0"
@@ -26,6 +36,7 @@
     "openclaw": "*"
   },
   "devDependencies": {
+    "esbuild": "^0.27.4",
     "typescript": "^5.4.0"
   }
 }
