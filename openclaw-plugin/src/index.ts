@@ -1,26 +1,132 @@
 import type { OpenClawPluginDefinition } from "openclaw/plugin-sdk";
 import { Type } from "@sinclair/typebox";
-import { movaPost, movaGet, movaPut, movaDelete, toolResult, type MovaConfig } from "./client.js";
+import {
+  movaPost, movaGet, movaPut, movaDelete,
+  movaRunSteps, shortId,
+  toolResult, type MovaConfig,
+} from "./client.js";
 
-function tool(
-  name: string,
-  label: string,
-  description: string,
-  parameters: Parameters<typeof Type.Object>[0],
-  execute: (cfg: () => MovaConfig, params: Record<string, unknown>) => Promise<unknown>
-) {
-  const schema = Type.Object(parameters);
-  return {
-    name,
-    label,
-    description,
-    parameters: schema,
-    async execute(toolCallId: string, params: Record<string, unknown>) {
-      void toolCallId;
-      return toolResult(await execute(() => { throw new Error("cfg not set"); }, params));
+// ── Step definitions ──────────────────────────────────────────────────────────
+
+const INVOICE_STEPS = [
+  {
+    step_id: "analyze", step_type: "ai_task", title: "OCR Extract and Validate Invoice", next_step_id: "verify",
+    config: {
+      model: "qwen/qwen3-vl-32b-instruct", api_key_env: "OCR_LLM_KEY",
+      system_prompt: "You are an invoice OCR and validation agent. The user message contains the invoice image. Extract all fields and validate. Return ONLY a JSON object with: document_id, vendor_name, vendor_iban, vendor_tax_id, total_amount (number), currency (ISO-4217), invoice_date (ISO-8601), due_date (ISO-8601), po_reference (null if missing), subtotal (number), tax_amount (number), line_items (array of {description, quantity, unit_price, amount}), review_decision (pass_to_ap/hold_for_review/reject), vendor_status (known/unknown/blocked), po_match (matched/partial/not_found), duplicate_flag (bool), ocr_confidence (0.0-1.0), risk_score (0.0-1.0), findings (list of {code, severity, summary}), requires_human_approval (bool), decision_reasoning (string).",
     },
-  };
-}
+  },
+  { step_id: "verify", step_type: "verification", title: "Risk Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide", step_type: "decision_point", title: "AP Decision Gate",
+    config: {
+      decision_kind: "invoice_approval", question: "Invoice processing complete. Select action:", required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "approve", label: "Approve — process payment" },
+        { option_id: "reject", label: "Reject — notify vendor" },
+        { option_id: "escalate_accountant", label: "Escalate to accountant" },
+        { option_id: "request_info", label: "Request more information" },
+      ],
+      route_map: { approve: "__end__", reject: "__end__", escalate_accountant: "__end__", request_info: "__end__", _default: "__end__" },
+    },
+  },
+];
+
+const PO_STEPS = [
+  {
+    step_id: "analyze", step_type: "ai_task", title: "PO Risk Analysis", next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini", api_key_env: "LLM_KEY",
+      system_prompt: "You are a procurement risk analyst. Review the purchase order data provided and run all connector checks. Return ONLY a JSON object with: po_id, review_decision (approve/hold/reject/escalate), approval_tier (manager/director/board), budget_check ({within_budget, utilization_pct, budget_remaining}), vendor_status (registered/pending/blacklisted), authority_check ({adequate, reason}), anomaly_flags (array), findings (array of {code, severity, summary}), requires_human_approval (bool), recommended_action (approve/hold/reject/escalate), decision_reasoning (string), risk_score (0.0-1.0).",
+    },
+  },
+  { step_id: "verify", step_type: "verification", title: "Procurement Risk Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide", step_type: "decision_point", title: "Procurement Decision Gate",
+    config: {
+      decision_kind: "procurement_review", question: "AI analysis complete. Select the procurement decision:", required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "approve", label: "Approve PO" },
+        { option_id: "hold", label: "Hold for review" },
+        { option_id: "reject", label: "Reject PO" },
+        { option_id: "escalate", label: "Escalate to director/board" },
+      ],
+      route_map: { approve: "__end__", hold: "__end__", reject: "__end__", escalate: "__end__", _default: "__end__" },
+    },
+  },
+];
+
+const TRADE_STEPS = [
+  {
+    step_id: "analyze", step_type: "ai_task", title: "Trade Risk Analysis", next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini", api_key_env: "LLM_KEY",
+      system_prompt: "You are a crypto trade risk analyst. Review the trade order data and run all risk checks. Return ONLY a JSON object with: trade_id, review_decision (approve/reject/escalate_human), risk_level (low/medium/high/critical), market_check ({price_usd, volatility_score, change_24h_pct}), balance_check ({sufficient, available_margin}), portfolio_risk ({concentration_pct, risk_level, var_1d_usd}), sanctions_check ({is_sanctioned, is_pep, list_name}), anomaly_flags (array), findings (array of {code, severity, summary}), rejection_reasons (array), requires_human_approval (bool), decision_reasoning (string), risk_score (0.0-1.0). IMMEDIATE REJECT: sanctions hit OR leverage > 10x. MANDATORY ESCALATE: order_size_usd >= 10000 OR leverage > 3.",
+    },
+  },
+  { step_id: "verify", step_type: "verification", title: "Trade Risk Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide", step_type: "decision_point", title: "Trading Decision Gate",
+    config: {
+      decision_kind: "trade_review", question: "Trade risk analysis complete. Select trading decision:", required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "approve", label: "Approve trade" },
+        { option_id: "reject", label: "Reject trade" },
+        { option_id: "escalate_human", label: "Escalate to human trader" },
+      ],
+      route_map: { approve: "__end__", reject: "__end__", escalate_human: "__end__", _default: "__end__" },
+    },
+  },
+];
+
+const COMPLAINTS_STEPS = [
+  {
+    step_id: "analyze", step_type: "ai_task", title: "Complaint Classification & Risk Analysis", next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini", api_key_env: "LLM_KEY",
+      system_prompt: "You are an EU financial services complaints handler. Review the complaint data and classify it. Return ONLY a JSON object with: complaint_id, triage_decision (routine/manual_review/blocked), product_risk (low/medium/high), sentiment_flags (array: compensation_claim, regulator_threat, fraud_signal, urgent), repeat_customer (bool), completeness_check ({text_present, channel_valid, product_identified}), anomaly_flags (array), findings (array of {code, severity, summary}), requires_human_approval (bool), recommended_action (auto_resolve/manual_review/reject_incomplete), decision_reasoning (string), risk_score (0.0-1.0), draft_response_hint (string). MANDATORY HUMAN REVIEW: compensation claim OR regulator threat OR repeat customer OR product_risk=high OR fraud_signal. BLOCKED: complaint_text empty or under 10 characters.",
+    },
+  },
+  { step_id: "verify", step_type: "verification", title: "Complaint Risk Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide", step_type: "decision_point", title: "Complaints Handler Decision Gate",
+    config: {
+      decision_kind: "complaint_review", question: "Complaint classification complete. Select handling decision:", required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "resolve", label: "Resolve — send standard response" },
+        { option_id: "escalate", label: "Escalate to complaints officer" },
+        { option_id: "reject", label: "Reject — incomplete or invalid" },
+        { option_id: "regulator_flag", label: "Flag for regulator reporting" },
+      ],
+      route_map: { resolve: "__end__", escalate: "__end__", reject: "__end__", regulator_flag: "__end__", _default: "__end__" },
+    },
+  },
+];
+
+const AML_STEPS = [
+  {
+    step_id: "analyze", step_type: "ai_task", title: "AML Alert Triage Analysis", next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini", api_key_env: "LLM_KEY",
+      system_prompt: "You are an AML compliance analyst performing L1 alert triage. Review the alert data and run all connector checks. Return ONLY a JSON object with: alert_id, triage_decision (false_positive/manual_review/immediate_escalate), risk_score_assessment (0-100), sanctions_check ({is_sanctioned, list_name}), pep_check ({is_pep, pep_category}), typology_match ({matched, typology_code, description}), customer_risk ({rating, jurisdiction_risk, burst_intensity}), anomaly_flags (array), findings (array of {code, severity, summary}), requires_human_approval (bool), recommended_action (clear/escalate_l2/immediate_escalate), decision_reasoning (string), risk_score (0.0-1.0). IMMEDIATE ESCALATE: sanctions_match=true OR pep_status=true OR risk_score > 85. FALSE POSITIVE: risk_score <= 30 AND no sanctions AND no PEP AND no prior alerts.",
+    },
+  },
+  { step_id: "verify", step_type: "verification", title: "AML Risk Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide", step_type: "decision_point", title: "AML Triage Decision Gate",
+    config: {
+      decision_kind: "aml_triage", question: "AML L1 triage complete. Select compliance decision:", required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "clear", label: "Clear — false positive" },
+        { option_id: "escalate_l2", label: "Escalate to L2 analyst" },
+        { option_id: "immediate_escalate", label: "Immediate escalation — freeze account" },
+      ],
+      route_map: { clear: "__end__", escalate_l2: "__end__", immediate_escalate: "__end__", _default: "__end__" },
+    },
+  },
+];
+
+// ── Plugin definition ─────────────────────────────────────────────────────────
 
 const plugin: OpenClawPluginDefinition = {
   id: "mova",
@@ -30,11 +136,11 @@ const plugin: OpenClawPluginDefinition = {
   register(api) {
     function cfg(): MovaConfig {
       const c = api.pluginConfig as { apiKey?: string; baseUrl?: string };
-      if (!c?.apiKey) throw new Error("MOVA API key not configured. Add it in OpenClaw plugin settings.");
+      if (!c?.apiKey) throw new Error("MOVA API key not configured. Set it with: openclaw config set plugins.entries.mova.config.apiKey YOUR_KEY");
       return { apiKey: c.apiKey, baseUrl: c.baseUrl ?? "https://api.mova-lab.eu" };
     }
 
-    // ── Invoice OCR ──────────────────────────────────────────────────────────
+    // ── Invoice OCR ───────────────────────────────────────────────────────────
 
     api.registerTool({
       name: "mova_hitl_start",
@@ -42,9 +148,31 @@ const plugin: OpenClawPluginDefinition = {
       description: "Submit a financial document (invoice, receipt, bill) for OCR extraction and human-in-the-loop approval.",
       parameters: Type.Object({
         file_url: Type.String({ description: "Direct HTTPS URL to the document image (PDF, JPEG, PNG)" }),
+        document_id: Type.Optional(Type.String({ description: "Optional document ID (auto-generated if not provided)" })),
       }),
       async execute(_id, p) {
-        return toolResult(await movaPost(cfg(), "/api/v1/contracts/hitl/start", { file_url: p.file_url }));
+        const config = cfg();
+        const docId = (p.document_id as string | undefined) || `INV-${shortId().toUpperCase()}`;
+        const contractId = `ctr-invoice-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.finance.invoice_ocr_hitl_v0",
+              policy_profile_ref: "policy.hitl.finance.invoice_ocr_v0",
+              initial_inputs: [
+                { key: "document_id", value: docId },
+                { key: "document_type", value: "invoice" },
+                { key: "file_url", value: p.file_url },
+              ],
+            },
+          },
+          steps: INVOICE_STEPS,
+        });
+        return toolResult(await movaRunSteps(config, contractId));
       },
     });
 
@@ -59,14 +187,30 @@ const plugin: OpenClawPluginDefinition = {
         approver_employee_id: Type.String({ description: "HR employee ID of the approver, e.g. EMP-1042" }),
       }),
       async execute(_id, p) {
-        return toolResult(await movaPost(cfg(), "/api/v1/contracts/hitl/start-po", {
-          po_id: p.po_id,
-          approver_employee_id: p.approver_employee_id,
-        }));
+        const config = cfg();
+        const contractId = `ctr-po-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.erp.po_approval_hitl_v0",
+              policy_profile_ref: "policy.hitl.erp.po_approval_v0",
+              initial_inputs: [
+                { key: "po_id", value: p.po_id },
+                { key: "approver_employee_id", value: p.approver_employee_id },
+              ],
+            },
+          },
+          steps: PO_STEPS,
+        });
+        return toolResult(await movaRunSteps(config, contractId));
       },
     });
 
-    // ── Crypto Trade Review ──────────────────────────────────────────────────
+    // ── Crypto Trade Review ───────────────────────────────────────────────────
 
     api.registerTool({
       name: "mova_hitl_start_trade",
@@ -83,11 +227,36 @@ const plugin: OpenClawPluginDefinition = {
         leverage: Type.Number({ description: "Leverage multiplier, 1 = no leverage" }),
       }),
       async execute(_id, p) {
-        return toolResult(await movaPost(cfg(), "/api/v1/contracts/hitl/start-trade", p));
+        const config = cfg();
+        const contractId = `ctr-trade-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.crypto.trade_review_hitl_v0",
+              policy_profile_ref: "policy.hitl.crypto.trade_review_v0",
+              initial_inputs: [
+                { key: "trade_id", value: p.trade_id },
+                { key: "wallet_address", value: p.wallet_address },
+                { key: "chain", value: p.chain },
+                { key: "token_pair", value: p.token_pair },
+                { key: "side", value: p.side },
+                { key: "order_type", value: p.order_type },
+                { key: "order_size_usd", value: String(p.order_size_usd) },
+                { key: "leverage", value: String(p.leverage) },
+              ],
+            },
+          },
+          steps: TRADE_STEPS,
+        });
+        return toolResult(await movaRunSteps(config, contractId));
       },
     });
 
-    // ── AML Alert Triage ─────────────────────────────────────────────────────
+    // ── AML Alert Triage ──────────────────────────────────────────────────────
 
     api.registerTool({
       name: "mova_hitl_start_aml",
@@ -112,7 +281,37 @@ const plugin: OpenClawPluginDefinition = {
         historical_alerts: Type.Optional(Type.Array(Type.String())),
       }),
       async execute(_id, p) {
-        return toolResult(await movaPost(cfg(), "/api/v1/contracts/hitl/start-aml", p));
+        const config = cfg();
+        const contractId = `ctr-aml-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.aml.alert_triage_hitl_v0",
+              policy_profile_ref: "policy.hitl.aml.alert_triage_v0",
+              initial_inputs: [
+                { key: "alert_id", value: p.alert_id },
+                { key: "rule_id", value: p.rule_id },
+                { key: "rule_description", value: p.rule_description },
+                { key: "risk_score", value: String(p.risk_score) },
+                { key: "customer_id", value: p.customer_id },
+                { key: "customer_name", value: p.customer_name },
+                { key: "customer_risk_rating", value: p.customer_risk_rating },
+                { key: "customer_type", value: p.customer_type },
+                { key: "customer_jurisdiction", value: p.customer_jurisdiction },
+                { key: "triggered_transactions", value: JSON.stringify(p.triggered_transactions) },
+                { key: "pep_status", value: String(p.pep_status) },
+                { key: "sanctions_match", value: String(p.sanctions_match) },
+                { key: "historical_alerts", value: JSON.stringify(p.historical_alerts ?? []) },
+              ],
+            },
+          },
+          steps: AML_STEPS,
+        });
+        return toolResult(await movaRunSteps(config, contractId));
       },
     });
 
@@ -135,7 +334,34 @@ const plugin: OpenClawPluginDefinition = {
         preferred_language: Type.Optional(Type.String()),
       }),
       async execute(_id, p) {
-        return toolResult(await movaPost(cfg(), "/api/v1/contracts/hitl/start-complaint", p));
+        const config = cfg();
+        const contractId = `ctr-cmp-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.complaints.handler_hitl_v0",
+              policy_profile_ref: "policy.hitl.complaints.handler_v0",
+              initial_inputs: [
+                { key: "complaint_id", value: p.complaint_id },
+                { key: "customer_id", value: p.customer_id },
+                { key: "complaint_text", value: p.complaint_text },
+                { key: "channel", value: p.channel },
+                { key: "product_category", value: p.product_category },
+                { key: "complaint_date", value: p.complaint_date },
+                { key: "previous_complaints", value: JSON.stringify(p.previous_complaints ?? []) },
+                { key: "attachments", value: JSON.stringify(p.attachments ?? []) },
+                { key: "customer_segment", value: p.customer_segment ?? "" },
+                { key: "preferred_language", value: p.preferred_language ?? "en" },
+              ],
+            },
+          },
+          steps: COMPLAINTS_STEPS,
+        });
+        return toolResult(await movaRunSteps(config, contractId));
       },
     });
 
@@ -151,10 +377,35 @@ const plugin: OpenClawPluginDefinition = {
         reason: Type.Optional(Type.String({ description: "Human reasoning for the decision" })),
       }),
       async execute(_id, p) {
-        return toolResult(await movaPost(cfg(), `/api/v1/contracts/${p.contract_id}/decide`, {
-          option: p.option,
-          reason: p.reason ?? "",
-        }));
+        const config = cfg();
+        const contractId = p.contract_id as string;
+        const dpResp = await movaGet(config, `/api/v1/contracts/${contractId}/decision`) as Record<string, unknown>;
+        const dp = (dpResp.decision_point ?? {}) as Record<string, unknown>;
+
+        const result = await movaPost(config, `/api/v1/contracts/${contractId}/decision`, {
+          envelope: {
+            kind: "env.decision.submit_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            decision_point_id: dp.decision_point_id ?? "",
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              selected_option_id: p.option,
+              selection_reason: (p.reason as string | undefined) ?? "decision via MOVA plugin",
+            },
+          },
+        }) as Record<string, unknown>;
+
+        if (!result.ok) return toolResult(result);
+
+        const audit = await movaGet(config, `/api/v1/contracts/${contractId}/audit`) as Record<string, unknown>;
+        return toolResult({
+          ok: true,
+          status: "completed",
+          contract_id: contractId,
+          decision: p.option,
+          audit_receipt: (audit as Record<string, unknown>).audit_receipt ?? {},
+        });
       },
     });
 
@@ -186,7 +437,14 @@ const plugin: OpenClawPluginDefinition = {
       description: "Get the compact audit journal for a contract — full signed event chain with timestamps.",
       parameters: Type.Object({ contract_id: Type.String() }),
       async execute(_id, p) {
-        return toolResult(await movaGet(cfg(), `/api/v1/contracts/${p.contract_id}/audit/compact`));
+        const config = cfg();
+        const contractId = p.contract_id as string;
+        const res = await fetch(
+          `${config.baseUrl.replace(/\/$/, "")}/api/v1/contracts/${contractId}/audit/compact/sidecar.jsonl`,
+          { headers: { Authorization: `Bearer ${config.apiKey}` } }
+        );
+        const text = await res.text();
+        return toolResult({ ok: res.ok, status: res.status, journal: text });
       },
     });
 
