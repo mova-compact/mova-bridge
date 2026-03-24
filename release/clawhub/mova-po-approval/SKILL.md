@@ -2,7 +2,7 @@
 name: mova-po-approval
 description: Submit a purchase order for automated risk analysis and procurement approval via MOVA HITL. Trigger when the user mentions a PO number, asks to approve/review a purchase order, or says anything like "check this PO", "approve purchase order", "PO review", "procurement approval".
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","envVars":[{"name":"MOVA_API_KEY","description":"MOVA platform API key — obtain at https://mova-lab.eu/register","required":true}],"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"PO ID, approver employee ID, AI analysis results, human decision, audit metadata"},{"service":"ERP connector (read-only)","data":"PO fields, vendor registry, budget data, authority matrix lookup"}],"binaryProvenance":{"name":"mova-bridge","installCmd":"pip install mova-bridge","source":"https://pypi.org/project/mova-bridge/","sourceRepo":"https://github.com/mova-compact/mova-bridge","license":"MIT-0"}}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","envVars":[{"name":"MOVA_API_KEY","description":"MOVA platform API key — obtain at https://mova-lab.eu/register","required":true}],"erpConnector":{"description":"ERP vendor/budget/authority data is fetched server-side by the MOVA runtime using your account credentials. No additional ERP credentials are required on the agent side — all ERP lookups are performed by the MOVA platform under your MOVA_API_KEY.","requiredClientConfig":"none"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"PO ID, approver employee ID, AI analysis results, human decision, audit metadata"},{"service":"ERP connector (server-side, read-only)","data":"PO fields, vendor registry, budget data, authority matrix — accessed by MOVA runtime, not by the agent"}],"binaryProvenance":{"name":"mova-bridge","installCmd":"pip install mova-bridge","source":"https://pypi.org/project/mova-bridge/","sourceRepo":"https://github.com/mova-compact/mova-bridge","license":"MIT-0"}}}
 ---
 
 # MOVA Purchase Order Approval
@@ -27,11 +27,20 @@ Source: [PyPI](https://pypi.org/project/mova-bridge/) · [GitHub](https://github
 **Credential:** Set `MOVA_API_KEY` in your OpenClaw environment (Settings → Environment Variables).
 Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 
+**Credential required:**
+
+| Variable | Required | Description |
+|---|---|---|
+| `MOVA_API_KEY` | ✅ Yes | MOVA platform API key — the only credential needed |
+
+**ERP connector — no additional credentials required:**
+Vendor registry, budget data, and authority matrix are fetched server-side by the MOVA runtime under your `MOVA_API_KEY`. The agent does not need separate ERP credentials, config paths, or service accounts. All ERP lookups happen inside the MOVA platform, not on your machine.
+
 **Data flows:**
 - PO ID + approver ID → `api.mova-lab.eu` (MOVA platform, EU-hosted)
-- ERP connector reads vendor registry, budget data, authority matrix (read-only, no data stored)
-- Audit journal → MOVA R2 storage, cryptographically signed, accessible only via your API key
-- No data is sent to third parties beyond the above
+- ERP data (vendor/budget/authority) → fetched by MOVA runtime server-side, read-only, not stored
+- Audit journal → MOVA R2 storage, signed, accessible only via your `MOVA_API_KEY`
+- No data sent to third parties beyond the above
 
 ## Quick start
 
