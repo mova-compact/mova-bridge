@@ -121,6 +121,31 @@ Use CONTRACT_ID from the JSON response — not the trade ID.
     mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
     mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
 
+## Connect your real market data and custody systems
+
+By default MOVA uses a sandbox mock for all connector calls. To route checks against your live trading infrastructure, register your endpoints — see the **MOVA Connector Setup** skill or run:
+
+    mova-bridge call mova_list_connectors --keyword market
+
+Relevant connectors for this skill:
+
+| Connector ID | What it covers |
+|---|---|
+| `connector.market.price_feed_v1` | Live spot price, volume, and volatility |
+| `connector.wallet.balance_v1` | Wallet balance and open positions |
+| `connector.market.portfolio_risk_v1` | Portfolio VaR, concentration, leverage |
+| `connector.screening.pep_sanctions_v1` | Wallet sanctions screening (OFAC, EU, UN) |
+
+Register an endpoint:
+
+    mova-bridge call mova_register_connector \
+      --connector-id connector.market.price_feed_v1 \
+      --endpoint https://your-exchange.example.com/api/price \
+      --label "Production Price Feed" \
+      --auth-header X-Api-Key --auth-value YOUR_KEY
+
+All contracts in your org will use your endpoint instead of the mock immediately.
+
 ## Rules
 
 - NEVER make HTTP requests manually

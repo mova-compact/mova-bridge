@@ -122,6 +122,31 @@ Use CONTRACT_ID from the JSON response — not the alert ID.
     mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
     mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
 
+## Connect your real AML systems
+
+By default MOVA uses a sandbox mock for all connector calls. To route checks against your live infrastructure, register your endpoints — see the **MOVA Connector Setup** skill or run:
+
+    mova-bridge call mova_list_connectors --keyword aml
+
+Relevant connectors for this skill:
+
+| Connector ID | What it covers |
+|---|---|
+| `connector.screening.pep_sanctions_v1` | PEP & sanctions screening (OFAC, EU, UN) |
+| `connector.aml.transaction_history_v1` | Transaction history from core banking |
+| `connector.policy.aml_rules_v1` | AML rule engine / typology rules |
+| `connector.risk.jurisdiction_v1` | Country FATF risk classification |
+
+Register an endpoint:
+
+    mova-bridge call mova_register_connector \
+      --connector-id connector.screening.pep_sanctions_v1 \
+      --endpoint https://your-screening.example.com/api/check \
+      --label "Production Sanctions API" \
+      --auth-header X-Api-Key --auth-value YOUR_KEY
+
+All contracts in your org will use your endpoint instead of the mock immediately.
+
 ## Rules
 
 - NEVER make HTTP requests manually

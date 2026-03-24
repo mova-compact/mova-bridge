@@ -122,6 +122,31 @@ Use CONTRACT_ID from the JSON response — not the PO number.
     mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
     mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
 
+## Connect your real ERP systems
+
+By default MOVA uses a sandbox mock for all connector calls. To route procurement checks against your live ERP, register your endpoints — see the **MOVA Connector Setup** skill or run:
+
+    mova-bridge call mova_list_connectors --keyword erp
+
+Relevant connectors for this skill:
+
+| Connector ID | What it covers |
+|---|---|
+| `connector.erp.po_lookup_v1` | Purchase order data from ERP |
+| `connector.erp.vendor_registry_v1` | Vendor registration status and bank accounts |
+| `connector.erp.budget_check_v1` | Budget availability and utilisation |
+| `connector.erp.hr_employee_v1` | Approver authority level from HR |
+
+Register an endpoint:
+
+    mova-bridge call mova_register_connector \
+      --connector-id connector.erp.po_lookup_v1 \
+      --endpoint https://your-erp.example.com/api/po/lookup \
+      --label "Production ERP" \
+      --auth-header X-Api-Key --auth-value YOUR_KEY
+
+All contracts in your org will use your endpoint instead of the mock immediately.
+
 ## Rules
 
 - NEVER make HTTP requests manually

@@ -115,6 +115,30 @@ mova-bridge call mova_hitl_audit_compact --contract-id ctr-cmp-xxxxxxxx
 - Human decision → MOVA Audit Journal (immutable, signed)
 - No data stored locally or sent to third parties
 
+## Connect your real CRM and policy systems
+
+By default MOVA uses a sandbox mock for all connector calls. To route checks against your live CRM and policy engine, register your endpoints — see the **MOVA Connector Setup** skill or run:
+
+    mova-bridge call mova_list_connectors --keyword crm
+
+Relevant connectors for this skill:
+
+| Connector ID | What it covers |
+|---|---|
+| `connector.crm.customer_lookup_v1` | Customer history and prior complaints from CRM |
+| `connector.policy.complaints_rules_v1` | Complaints handling rules by product/jurisdiction |
+| `connector.notification.email_v1` | Customer notification email |
+
+Register an endpoint:
+
+    mova-bridge call mova_register_connector \
+      --connector-id connector.crm.customer_lookup_v1 \
+      --endpoint https://your-crm.example.com/api/customers \
+      --label "Production CRM" \
+      --auth-header Authorization --auth-value "Bearer YOUR_TOKEN"
+
+All contracts in your org will use your endpoint instead of the mock immediately.
+
 ## Rules
 
 - Agent never makes HTTP requests directly

@@ -114,6 +114,32 @@ Use CONTRACT_ID from the JSON response above — not the invoice number.
     mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
     mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
 
+## Connect your real OCR and ERP systems
+
+By default MOVA uses a sandbox mock for all connector calls. To use your live document processing and ERP, register your endpoints — see the **MOVA Connector Setup** skill or run:
+
+    mova-bridge call mova_list_connectors --keyword ocr
+
+Relevant connectors for this skill:
+
+| Connector ID | What it covers |
+|---|---|
+| `connector.ocr.document_extract_v1` | Document OCR extraction |
+| `connector.ocr.vision_llm_v1` | Vision LLM OCR (OpenRouter) |
+| `connector.finance.duplicate_check_v1` | Duplicate invoice detection |
+| `connector.tax.vat_validate_v1` | VAT number validation (VIES) |
+| `connector.erp.invoice_post_v1` | ERP invoice posting / status update |
+
+Register an endpoint:
+
+    mova-bridge call mova_register_connector \
+      --connector-id connector.erp.invoice_post_v1 \
+      --endpoint https://your-erp.example.com/api/invoices \
+      --label "Production ERP" \
+      --auth-header X-Api-Key --auth-value YOUR_KEY
+
+All contracts in your org will use your endpoint instead of the mock immediately.
+
 ## Rules
 
 - NEVER make HTTP requests manually

@@ -21,7 +21,7 @@ from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-_VERSION = "0.3.0"
+_VERSION = "0.6.0"
 _DEFAULT_API_URL = "https://api.mova-lab.eu"
 
 mcp = FastMCP("mova-bridge")
@@ -76,6 +76,31 @@ def _post(path: str, body: dict, require_key: bool = True, timeout: int = 30) ->
             f"{_api_url()}{path}",
             headers=_headers(require_key=require_key),
             content=json.dumps(body),
+            timeout=timeout,
+        )
+        return _handle(r)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _put(path: str, body: dict, timeout: int = 30) -> Any:
+    try:
+        r = _client.put(
+            f"{_api_url()}{path}",
+            headers=_headers(),
+            content=json.dumps(body),
+            timeout=timeout,
+        )
+        return _handle(r)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _delete(path: str, timeout: int = 30) -> Any:
+    try:
+        r = _client.delete(
+            f"{_api_url()}{path}",
+            headers=_headers(),
             timeout=timeout,
         )
         return _handle(r)
@@ -269,6 +294,103 @@ def mova_usage() -> str:
     Returns JSON with total spend, execution count, and balance remaining.
     """
     result = _get("/api/v1/orgs/_me/spend")
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+# ── Connector Registry ─────────────────────────────────────────────────────────
+
+@mcp.tool(name="mova_list_connectors")
+def mova_list_connectors(keyword: str = "") -> str:
+    """List all available MOVA connectors and your registered overrides.
+
+    Use this to show the user which connectors are available and which ones
+    they have already configured with their own endpoints.
+
+    Args:
+        keyword: Optional filter — matches connector_id or display_name (case-insensitive).
+
+    Returns JSON with two lists:
+      - connectors: all platform connectors (id, display_name, description)
+      - overrides:  connectors you have already registered your own endpoint for
+    """
+    connectors_result = _get("/api/v1/connectors")
+    overrides_result  = _get("/api/v1/connectors/overrides")
+
+    connectors = connectors_result.get("connectors", [])
+    if keyword:
+        kw = keyword.lower()
+        connectors = [
+            c for c in connectors
+            if kw in c.get("connector_id", "").lower()
+            or kw in c.get("display_name", "").lower()
+            or kw in c.get("description", "").lower()
+        ]
+
+    overrides = overrides_result.get("overrides", [])
+    override_ids = {o["connector_id"] for o in overrides}
+
+    # Mark which connectors have user overrides
+    for c in connectors:
+        c["has_override"] = c["connector_id"] in override_ids
+
+    return json.dumps({
+        "ok": True,
+        "connectors": connectors,
+        "overrides": overrides,
+        "note": (
+            "Connectors without an override use the MOVA sandbox mock. "
+            "Call mova_register_connector to point a connector at your real system."
+        ),
+    }, ensure_ascii=False, indent=2)
+
+
+@mcp.tool(name="mova_register_connector")
+def mova_register_connector(
+    connector_id: str,
+    endpoint: str,
+    label: str = "",
+    auth_header: str = "",
+    auth_value: str = "",
+) -> str:
+    """Register your own endpoint for a MOVA connector.
+
+    After registering, all contracts your organisation runs will call YOUR
+    endpoint instead of the MOVA sandbox mock for this connector.
+
+    Call mova_list_connectors first to see available connector IDs.
+
+    Args:
+        connector_id: Connector ID to override, e.g. "connector.erp.po_lookup_v1".
+        endpoint:     Your HTTPS endpoint URL, e.g. "https://erp.acme.com/api/po/lookup".
+                      Must be HTTPS.
+        label:        Optional human-readable label, e.g. "Production ERP".
+        auth_header:  Optional custom auth header name, e.g. "X-Api-Key".
+        auth_value:   Optional auth header value (keep confidential).
+
+    Returns JSON confirming the registration.
+    """
+    body: dict = {"endpoint": endpoint}
+    if label:
+        body["label"] = label
+    if auth_header:
+        body["auth_header"] = auth_header
+    if auth_value:
+        body["auth_value"] = auth_value
+
+    result = _put(f"/api/v1/connectors/{connector_id}/override", body)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool(name="mova_delete_connector_override")
+def mova_delete_connector_override(connector_id: str) -> str:
+    """Remove your custom endpoint for a connector, reverting to the MOVA sandbox mock.
+
+    Args:
+        connector_id: Connector ID to reset, e.g. "connector.erp.po_lookup_v1".
+
+    Returns JSON confirming removal.
+    """
+    result = _delete(f"/api/v1/connectors/{connector_id}/override")
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
@@ -1066,6 +1188,8 @@ def _cli_call(args: list[str]) -> None:
     Calls a tool function and prints JSON result to stdout.
     """
     import sys
+    import logging
+    logging.disable(logging.CRITICAL)  # suppress httpx INFO logs from polluting stdout
     if not args:
         print(json.dumps({"ok": False, "error": "Usage: mova-bridge call <tool> [--key value ...]"}))
         sys.exit(1)
@@ -1132,6 +1256,17 @@ def _cli_call(args: list[str]) -> None:
         "mova_execute":            lambda: mova_execute(kwargs.get("contract_id", ""), json.loads(kwargs.get("inputs", "{}"))),
         "mova_list_contracts":     lambda: mova_list_contracts(),
         "mova_usage":              lambda: mova_usage(),
+        "mova_list_connectors":    lambda: mova_list_connectors(keyword=kwargs.get("keyword", "")),
+        "mova_register_connector": lambda: mova_register_connector(
+            connector_id=kwargs["connector_id"],
+            endpoint=kwargs["endpoint"],
+            label=kwargs.get("label", ""),
+            auth_header=kwargs.get("auth_header", ""),
+            auth_value=kwargs.get("auth_value", ""),
+        ),
+        "mova_delete_connector_override": lambda: mova_delete_connector_override(
+            connector_id=kwargs["connector_id"],
+        ),
     }
 
     fn = dispatch.get(tool_name)
