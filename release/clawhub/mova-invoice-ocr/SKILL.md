@@ -2,6 +2,7 @@
 name: mova-invoice-ocr
 description: Process any financial document — invoice, bill, receipt, or purchase order — via MOVA OCR and human-in-the-loop approval. Trigger when the user shares a document image URL or asks to process, extract, or review a financial document. Always confirm before starting.
 license: MIT-0
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","envVars":[{"name":"MOVA_API_KEY","description":"MOVA platform API key — obtain at https://mova-lab.eu/register","required":true}],"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"invoice image URL, extracted document fields, human decision, audit metadata"},{"service":"ERP connector (read-only mock by default)","data":"PO reference number for cross-reference lookup"}],"binaryProvenance":{"name":"mova-bridge","installCmd":"pip install mova-bridge","source":"https://pypi.org/project/mova-bridge/","sourceRepo":"https://github.com/mova-compact/mova-bridge","license":"MIT-0"}}}
 ---
 
 # MOVA Invoice OCR & Approval
@@ -14,6 +15,25 @@ Submit a supplier invoice to MOVA for automated OCR extraction, risk validation,
 2. **Risk validation** — checks for duplicate invoices, unknown vendors, IBAN changes, VAT mismatches
 3. **Human decision gate** — you choose: approve / reject / escalate / request info
 4. **Audit receipt** — every decision is signed, timestamped, and stored in an immutable compact journal
+
+## Requirements
+
+**Binary:** `mova-bridge` CLI — install once:
+```
+pip install mova-bridge
+```
+Source: [PyPI](https://pypi.org/project/mova-bridge/) · [GitHub](https://github.com/mova-compact/mova-bridge) · License: MIT-0
+
+**Credential:** Set `MOVA_API_KEY` in your OpenClaw environment (Settings → Environment Variables).
+Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+
+**Data flows:**
+- Invoice image URL + extracted fields → `api.mova-lab.eu` (MOVA platform, EU-hosted)
+- PO reference number → ERP connector (read-only lookup, no data stored)
+- Audit journal → MOVA R2 storage, cryptographically signed, accessible only via your API key
+- No data is sent to third parties beyond the above
+
+**Signing keys:** The compact audit journal is signed by the MOVA runtime using your account's session key. You retain full access via `mova-bridge call mova_hitl_audit_compact`.
 
 ## Quick start
 
