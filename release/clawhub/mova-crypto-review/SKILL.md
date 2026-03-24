@@ -52,13 +52,13 @@ The agent submits it to MOVA, shows the AI risk analysis with sanctions check, b
 ## Demo
 
 **Step 1 — Task submitted with trade document (RISK GATE REQUIRED)**
-![Step 1](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_trade_step1_task.jpg)
+![Step 1](screenshots/01-input.jpg)
 
 **Step 2 — AI analysis: risk 0.62, sanctions clean, large_order_size flag, escalate_human recommended**
-![Step 2](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_trade_step2_analysis.jpg)
+![Step 2](screenshots/02-analysis.jpg)
 
 **Step 3 — Compact audit log with full event timeline**
-![Step 3](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_trade_step3_audit.jpg)
+![Step 3](screenshots/03-audit.jpg)
 
 ## Why contract execution matters
 

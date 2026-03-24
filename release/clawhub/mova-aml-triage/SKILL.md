@@ -52,13 +52,13 @@ The agent submits the alert to MOVA, runs L1 triage with typology matching and s
 ## Demo
 
 **Step 1 — Alert submitted: TM-STRUCT-11, risk 91, RISK HIGH flag**
-![Step 1](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_aml_step1_task.jpg)
+![Step 1](screenshots/01-input.jpg)
 
 **Step 2 — AI analysis: structuring typology matched, risk 91/100, escalate_l2 decision**
-![Step 2](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_aml_step2_analysis.jpg)
+![Step 2](screenshots/02-analysis.jpg)
 
 **Step 3 — Audit receipt + compact journal with full compliance event chain**
-![Step 3](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_aml_step3_audit.jpg)
+![Step 3](screenshots/03-audit.jpg)
 
 ## Why contract execution matters
 

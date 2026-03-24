@@ -48,16 +48,16 @@ The agent submits it to MOVA, shows the extracted data with risk score and findi
 ## Demo
 
 **Step 1 — Task submitted with invoice image**
-![Step 1](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_invoice_step1_task.jpg)
+![Step 1](screenshots/01-input.jpg)
 
 **Step 2 — AI analysis: vendor, line items, risk score 0.15, findings**
-![Step 2](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_invoice_step2_analysis.jpg)
+![Step 2](screenshots/02-analysis.jpg)
 
 **Step 3 — Human decision gate**
-![Step 3](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_invoice_step3_decision.jpg)
+![Step 3](screenshots/03-decision.jpg)
 
 **Step 4 — Audit receipt + compact journal**
-![Step 4](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_invoice_step4_audit.jpg)
+![Step 4](screenshots/04-audit.jpg)
 
 ## Why contract execution matters
 

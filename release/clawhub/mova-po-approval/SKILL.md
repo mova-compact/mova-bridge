@@ -46,13 +46,13 @@ The agent submits it to MOVA, shows the AI risk analysis with findings and anoma
 ## Demo
 
 **Step 1 — Task submitted with PO document**
-![Step 1](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_po_step1_task.jpg)
+![Step 1](screenshots/01-input.jpg)
 
 **Step 2 — AI risk analysis: risk score 0.78, findings, escalate recommended**
-![Step 2](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_po_step2_analysis.jpg)
+![Step 2](screenshots/02-analysis.jpg)
 
 **Step 3 — Audit receipt + compact journal**
-![Step 3](https://raw.githubusercontent.com/mova-compact/mova-bridge/main/demo_po_step3_audit.jpg)
+![Step 3](screenshots/03-audit.jpg)
 
 ## Why contract execution matters
 
