@@ -2,7 +2,7 @@
 name: mova-crypto-review
 description: Submit a crypto trade order for automated risk analysis and human-in-the-loop review via MOVA. Trigger when the user mentions a trade order, wallet address, token pair, or asks to review/approve a crypto trade. Mandatory human escalation for orders above $10,000 or leverage above 3x.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install ~/mova-plugin/openclaw-plugin","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"trade ID, wallet address, chain, token pair, order size, leverage, AI analysis results, human decision, audit metadata"},{"service":"Market data connector (read-only)","data":"token pair for price and volatility lookup"},{"service":"Sanctions screening connector (read-only)","data":"wallet address screened against OFAC, EU, UN lists"}]}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"trade ID, wallet address, chain, token pair, order size, leverage, AI analysis results, human decision, audit metadata"},{"service":"Market data connector (read-only)","data":"token pair for price and volatility lookup"},{"service":"Sanctions screening connector (read-only)","data":"wallet address screened against OFAC, EU, UN lists"}]}}
 ---
 
 # MOVA Crypto Trade Review

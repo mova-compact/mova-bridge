@@ -2,7 +2,7 @@
 name: mova-po-approval
 description: Submit a purchase order for automated risk analysis and procurement approval via MOVA HITL. Trigger when the user mentions a PO number, asks to approve/review a purchase order, or says anything like "check this PO", "approve purchase order", "PO review", "procurement approval".
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install ~/mova-plugin/openclaw-plugin","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"PO ID, approver employee ID, AI analysis results, human decision, audit metadata"},{"service":"ERP connector (server-side, read-only)","data":"PO fields, vendor registry, budget data, authority matrix — accessed by MOVA runtime, not by the agent"}]}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"PO ID, approver employee ID, AI analysis results, human decision, audit metadata"},{"service":"ERP connector (server-side, read-only)","data":"PO fields, vendor registry, budget data, authority matrix — accessed by MOVA runtime, not by the agent"}]}}
 ---
 
 # MOVA Purchase Order Approval

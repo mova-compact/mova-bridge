@@ -2,7 +2,7 @@
 name: mova-invoice-ocr
 description: Process any financial document — invoice, bill, receipt, or purchase order — via MOVA OCR and human-in-the-loop approval. Trigger when the user shares a document image URL or asks to process, extract, or review a financial document. Always confirm before starting.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install ~/mova-plugin/openclaw-plugin","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"invoice image URL, extracted document fields, human decision, audit metadata"},{"service":"ERP connector (read-only mock by default)","data":"PO reference number for cross-reference lookup"}]}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"invoice image URL, extracted document fields, human decision, audit metadata"},{"service":"ERP connector (read-only mock by default)","data":"PO reference number for cross-reference lookup"}]}}
 ---
 
 # MOVA Invoice OCR & Approval

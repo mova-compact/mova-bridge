@@ -2,7 +2,7 @@
 name: mova-aml-triage
 description: Submit an AML transaction monitoring alert for automated L1 triage and human-in-the-loop compliance decision via MOVA. Trigger when the user mentions an AML alert, transaction monitoring alert ID, or asks to triage/review a suspicious transaction alert. Mandatory human escalation on sanctions hit, PEP flag, or risk score above 85.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install ~/mova-plugin/openclaw-plugin","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"alert ID, rule ID, risk score, customer data, transaction list, PEP/sanctions flags, human decision, audit metadata"},{"service":"Sanctions screening connector (read-only)","data":"customer ID and transaction data screened against OFAC, EU, UN lists"},{"service":"Customer risk connector (read-only)","data":"customer ID for risk rating and prior alert history lookup"}]}}
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"alert ID, rule ID, risk score, customer data, transaction list, PEP/sanctions flags, human decision, audit metadata"},{"service":"Sanctions screening connector (read-only)","data":"customer ID and transaction data screened against OFAC, EU, UN lists"},{"service":"Customer risk connector (read-only)","data":"customer ID for risk rating and prior alert history lookup"}]}}
 ---
 
 # MOVA AML Alert Triage
