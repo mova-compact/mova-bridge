@@ -3,19 +3,20 @@ export interface MovaConfig {
   baseUrl: string;
 }
 
-export async function movaPost(
+async function movaRequest(
   config: MovaConfig,
+  method: string,
   path: string,
-  body: unknown
+  body?: unknown
 ): Promise<unknown> {
   const url = `${config.baseUrl.replace(/\/$/, "")}${path}`;
   const res = await fetch(url, {
-    method: "POST",
+    method,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify(body),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   const data = await res.json();
   if (!res.ok) {
@@ -24,58 +25,21 @@ export async function movaPost(
   return data;
 }
 
-export async function movaGet(
-  config: MovaConfig,
-  path: string
-): Promise<unknown> {
-  const url = `${config.baseUrl.replace(/\/$/, "")}${path}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${config.apiKey}` },
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`MOVA API error ${res.status}: ${JSON.stringify(data)}`);
-  }
-  return data;
-}
+export const movaPost = (c: MovaConfig, path: string, body: unknown) =>
+  movaRequest(c, "POST", path, body);
 
-export async function movaPut(
-  config: MovaConfig,
-  path: string,
-  body: unknown
-): Promise<unknown> {
-  const url = `${config.baseUrl.replace(/\/$/, "")}${path}`;
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`MOVA API error ${res.status}: ${JSON.stringify(data)}`);
-  }
-  return data;
-}
+export const movaGet = (c: MovaConfig, path: string) =>
+  movaRequest(c, "GET", path);
 
-export async function movaDelete(
-  config: MovaConfig,
-  path: string
-): Promise<unknown> {
-  const url = `${config.baseUrl.replace(/\/$/, "")}${path}`;
-  const res = await fetch(url, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${config.apiKey}` },
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`MOVA API error ${res.status}: ${JSON.stringify(data)}`);
-  }
-  return data;
-}
+export const movaPut = (c: MovaConfig, path: string, body: unknown) =>
+  movaRequest(c, "PUT", path, body);
 
-export function json(data: unknown): { content: [{ type: "text"; text: string }] } {
-  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+export const movaDelete = (c: MovaConfig, path: string) =>
+  movaRequest(c, "DELETE", path);
+
+export function toolResult(data: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+    details: data,
+  };
 }

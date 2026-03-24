@@ -16,7 +16,6 @@
         "default": "https://api.mova-lab.eu"
       }
     },
-    "required": ["apiKey"],
     "additionalProperties": false
   },
   "uiHints": {
