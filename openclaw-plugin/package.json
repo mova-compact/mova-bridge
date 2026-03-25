@@ -23,7 +23,10 @@
   "openclaw": {
     "extensions": [
       "./dist/index.js"
-    ]
+    ],
+    "compat": {
+      "pluginApi": "^1.0.0"
+    }
   },
   "files": [
     "dist",
