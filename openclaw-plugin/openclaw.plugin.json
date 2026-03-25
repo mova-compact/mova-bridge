@@ -1,8 +1,8 @@
 {
   "id": "mova",
   "name": "MOVA",
-  "description": "HITL contract execution for business workflows — invoice OCR, PO approval, AML triage, complaints handling, crypto trade review, and connector registry.",
-  "version": "0.3.0",
+  "description": "HITL contract execution for business workflows — invoice OCR, PO approval, AML triage, complaints handling, crypto trade review, compliance audit, credit scoring, supply chain risk, churn prediction, contract generation, and connector registry.",
+  "version": "0.4.0",
   "configSchema": {
     "type": "object",
     "properties": {

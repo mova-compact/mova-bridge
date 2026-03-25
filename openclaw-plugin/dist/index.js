@@ -2637,6 +2637,161 @@ var AML_STEPS = [
     }
   }
 ];
+var COMPLIANCE_STEPS = [
+  {
+    step_id: "analyze",
+    step_type: "ai_task",
+    title: "Compliance Rules Check",
+    next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini",
+      api_key_env: "LLM_KEY",
+      system_prompt: "You are a compliance auditor. Review the document data against the specified regulatory framework. Return ONLY a JSON object with: document_id, framework, pass_count (int), total_checks (int), critical_count (int), findings (array of {code, severity, summary, recommendation}), requires_human_approval (bool), recommended_action (approve/approve_with_conditions/reject/request_corrections), decision_reasoning (string), risk_score (0.0-1.0). Be thorough and flag any gaps in the document against the framework requirements."
+    }
+  },
+  { step_id: "verify", step_type: "verification", title: "Compliance Findings Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide",
+    step_type: "decision_point",
+    title: "Compliance Audit Decision Gate",
+    config: {
+      decision_kind: "compliance_audit",
+      question: "Compliance audit complete. Select decision:",
+      required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "approve", label: "Approve \u2014 document is compliant" },
+        { option_id: "approve_with_conditions", label: "Approve with conditions \u2014 list remediation items in reason" },
+        { option_id: "reject", label: "Reject \u2014 document fails compliance" },
+        { option_id: "request_corrections", label: "Return for corrections" }
+      ],
+      route_map: { approve: "__end__", approve_with_conditions: "__end__", reject: "__end__", request_corrections: "__end__", _default: "__end__" }
+    }
+  }
+];
+var CREDIT_STEPS = [
+  {
+    step_id: "analyze",
+    step_type: "ai_task",
+    title: "Credit Risk Scoring",
+    next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini",
+      api_key_env: "LLM_KEY",
+      system_prompt: "You are a credit risk analyst. Evaluate the applicant's creditworthiness based on the provided financial data. Return ONLY a JSON object with: applicant_id, score (0-1000), risk_band (excellent/good/fair/poor/very_poor), recommended_limit (number), debt_to_income_ratio (number), key_factors (array of {factor, impact: positive/negative, weight}), model_version (string), findings (array of {code, severity, summary}), requires_human_approval (bool), recommended_action (approve/approve_reduced/reject/request_info), decision_reasoning (string), risk_score (0.0-1.0). MANDATORY HUMAN APPROVAL for all decisions."
+    }
+  },
+  { step_id: "verify", step_type: "verification", title: "Credit Risk Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide",
+    step_type: "decision_point",
+    title: "Credit Decision Gate",
+    config: {
+      decision_kind: "credit_decision",
+      question: "Credit scoring complete. Select credit decision:",
+      required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "approve", label: "Approve at recommended limit" },
+        { option_id: "approve_reduced", label: "Approve at reduced limit \u2014 specify amount in reason" },
+        { option_id: "reject", label: "Reject application" },
+        { option_id: "request_info", label: "Request additional documents" }
+      ],
+      route_map: { approve: "__end__", approve_reduced: "__end__", reject: "__end__", request_info: "__end__", _default: "__end__" }
+    }
+  }
+];
+var SUPPLY_CHAIN_STEPS = [
+  {
+    step_id: "analyze",
+    step_type: "ai_task",
+    title: "Supplier Screening & Risk Analysis",
+    next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini",
+      api_key_env: "LLM_KEY",
+      system_prompt: "You are a supply chain risk analyst. Screen each supplier against sanctions lists, PEP registries, ESG ratings, and financial stability indicators. Return ONLY a JSON object with: total_count (int), critical_count (int), high_count (int), clean_count (int), results (array of {id, name, country, risk_band: low/medium/high/critical, sanctions_match: bool, pep_match: bool, esg_rating, financial_stability, findings: array}), requires_human_approval (bool), recommended_action (approve_all/approve_clean/reject_all/escalate), decision_reasoning (string), risk_score (0.0-1.0)."
+    }
+  },
+  { step_id: "verify", step_type: "verification", title: "Supply Chain Risk Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide",
+    step_type: "decision_point",
+    title: "Supply Chain Approval Gate",
+    config: {
+      decision_kind: "supply_chain_review",
+      question: "Supplier screening complete. Select procurement decision:",
+      required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "approve_all", label: "Approve all screened suppliers" },
+        { option_id: "approve_clean", label: "Approve clean suppliers only \u2014 block high-risk" },
+        { option_id: "reject_all", label: "Block entire batch \u2014 pending further review" },
+        { option_id: "escalate", label: "Escalate to compliance team" }
+      ],
+      route_map: { approve_all: "__end__", approve_clean: "__end__", reject_all: "__end__", escalate: "__end__", _default: "__end__" }
+    }
+  }
+];
+var CHURN_STEPS = [
+  {
+    step_id: "analyze",
+    step_type: "ai_task",
+    title: "Churn Risk Prediction",
+    next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini",
+      api_key_env: "LLM_KEY",
+      system_prompt: "You are a customer retention analyst. Analyze customer behavior signals and predict churn risk. Return ONLY a JSON object with: segment_id, total_analyzed (int), at_risk_count (int), avg_churn_score (number), model_version (string), top_at_risk (array of {customer_id, churn_score, top_factor, recommended_action}), key_signals (array of {signal, importance}), findings (array of {code, severity, summary}), requires_human_approval (bool), recommended_action (launch_campaign/launch_selective/defer/escalate), decision_reasoning (string), risk_score (0.0-1.0)."
+    }
+  },
+  { step_id: "verify", step_type: "verification", title: "Churn Risk Snapshot", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide",
+    step_type: "decision_point",
+    title: "Retention Campaign Decision Gate",
+    config: {
+      decision_kind: "churn_retention",
+      question: "Churn analysis complete. Select retention action:",
+      required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "launch_campaign", label: "Launch retention campaign for all high-risk customers" },
+        { option_id: "launch_selective", label: "Launch for top-N only \u2014 specify N in reason" },
+        { option_id: "defer", label: "Defer to next review cycle" },
+        { option_id: "escalate", label: "Escalate to VP of Customer Success" }
+      ],
+      route_map: { launch_campaign: "__end__", launch_selective: "__end__", defer: "__end__", escalate: "__end__", _default: "__end__" }
+    }
+  }
+];
+var CONTRACT_GEN_STEPS = [
+  {
+    step_id: "analyze",
+    step_type: "ai_task",
+    title: "Legal Document Draft Generation",
+    next_step_id: "verify",
+    config: {
+      model: "openai/gpt-4o-mini",
+      api_key_env: "LLM_KEY",
+      system_prompt: "You are a legal document specialist. Generate a structured legal document draft from the provided parameters. Return ONLY a JSON object with: document_id (string), doc_type, party_a, party_b, jurisdiction, sections (array of {section_id, title, content}), terms_extracted (object), findings (array of {code, severity, summary}), requires_human_approval (bool, always true), recommended_action (always 'review_sections'), decision_reasoning (string), risk_score (0.0-1.0). Generate complete and legally coherent section content. Do not include legal advice disclaimers in the JSON."
+    }
+  },
+  { step_id: "verify", step_type: "verification", title: "Document Draft Ready for Review", next_step_id: "decide", config: { recommended_action: "review" } },
+  {
+    step_id: "decide",
+    step_type: "decision_point",
+    title: "Legal Review & Sign-off Gate",
+    config: {
+      decision_kind: "contract_review",
+      question: "Document draft generated. Select review action:",
+      required_actor: { actor_type: "human" },
+      options: [
+        { option_id: "approve_section", label: "Approve current section as written" },
+        { option_id: "edit_section", label: "Accept with edits \u2014 provide edited text in reason" },
+        { option_id: "reject_section", label: "Reject section \u2014 request redraft" },
+        { option_id: "escalate", label: "Escalate to senior legal counsel" }
+      ],
+      route_map: { approve_section: "__end__", edit_section: "__end__", reject_section: "__end__", escalate: "__end__", _default: "__end__" }
+    }
+  }
+];
 var CONTRACT_SCHEMAS = {
   invoice: [
     { field: "file_url", question: "Provide the direct HTTPS URL to the invoice document (PDF, JPEG or PNG).", example: "https://example.com/invoice.jpg", required: true },
@@ -2677,6 +2832,40 @@ var CONTRACT_SCHEMAS = {
     { field: "triggered_transactions", question: "List the triggered transactions as a JSON array.", example: '[{"transaction_id":"TXN-001","amount_eur":9800}]', required: true },
     { field: "pep_status", question: "Is the customer a Politically Exposed Person (PEP)? (true/false)", example: "false", required: true },
     { field: "sanctions_match", question: "Is there a sanctions list match? (true/false)", example: "false", required: true }
+  ],
+  compliance: [
+    { field: "document_url", question: "Provide the direct HTTPS URL to the document to audit (PDF, DOCX, or image).", example: "https://example.com/policy.pdf", required: true },
+    { field: "framework", question: "Which compliance framework to check against?", example: "gdpr, pci_dss, iso_27001, soc2", required: true },
+    { field: "document_id", question: "Provide a document ID, or reply 'skip' to auto-generate.", example: "POL-2026-001", required: false },
+    { field: "org_name", question: "What is the organization name?", example: "Acme Corp", required: true }
+  ],
+  credit: [
+    { field: "applicant_id", question: "What is the applicant ID?", example: "APP-2026-0042", required: true },
+    { field: "monthly_income", question: "What is the applicant's monthly income (in local currency)?", example: "5000", required: true },
+    { field: "total_debt", question: "What is the applicant's total existing debt?", example: "12000", required: true },
+    { field: "credit_history_months", question: "How many months of credit history does the applicant have?", example: "36", required: true },
+    { field: "bureau_score", question: "What is the credit bureau score?", example: "720", required: true },
+    { field: "requested_amount", question: "What loan amount is being requested?", example: "25000", required: true },
+    { field: "loan_purpose", question: "What is the purpose of the loan?", example: "home, auto, business, personal", required: true }
+  ],
+  supply_chain: [
+    { field: "suppliers", question: "Provide the supplier list as a JSON array with id, name, and country fields.", example: '[{"id":"SUP-001","name":"Acme GmbH","country":"DE"}]', required: true },
+    { field: "category", question: "What is the procurement category?", example: "raw_materials, logistics, technology, services", required: true },
+    { field: "requestor_id", question: "What is the requestor employee ID?", example: "EMP-1042", required: true }
+  ],
+  churn: [
+    { field: "segment_id", question: "What is the customer segment ID to analyze?", example: "SEG-enterprise-2026", required: true },
+    { field: "period_days", question: "How many days of activity history to analyze?", example: "30", required: true },
+    { field: "threshold", question: "What churn probability threshold to flag (0.0\u20131.0)?", example: "0.7", required: true },
+    { field: "requestor_id", question: "What is the requestor employee ID?", example: "EMP-1042", required: true }
+  ],
+  contract_gen: [
+    { field: "doc_type", question: "What type of document to generate?", example: "nda, service_agreement, supply_contract, sla", required: true },
+    { field: "party_a", question: "What is the name of Party A?", example: "Acme Corp", required: true },
+    { field: "party_b", question: "What is the name of Party B?", example: "Beta LLC", required: true },
+    { field: "jurisdiction", question: "What is the governing law jurisdiction?", example: "DE, US-NY, EU", required: true },
+    { field: "effective_date", question: "What is the effective date (ISO format)?", example: "2026-04-01", required: true },
+    { field: "template_id", question: "Provide a template ID, or reply 'skip' to use the default template.", example: "TMPL-NDA-001", required: false }
   ]
 };
 var START_TOOL = {
@@ -2684,7 +2873,12 @@ var START_TOOL = {
   po: "mova_hitl_start_po",
   trade: "mova_hitl_start_trade",
   complaint: "mova_hitl_start_complaint",
-  aml: "mova_hitl_start_aml"
+  aml: "mova_hitl_start_aml",
+  compliance: "mova_hitl_start_compliance",
+  credit: "mova_hitl_start_credit",
+  supply_chain: "mova_hitl_start_supply_chain",
+  churn: "mova_hitl_start_churn",
+  contract_gen: "mova_hitl_start_contract_gen"
 };
 var plugin = {
   id: "mova",
@@ -2902,6 +3096,194 @@ var plugin = {
             }
           },
           steps: COMPLAINTS_STEPS
+        });
+        return toolResult(await movaRunSteps(config, contractId));
+      }
+    });
+    api.registerTool({
+      name: "mova_hitl_start_compliance",
+      label: "MOVA: Start Compliance Audit",
+      description: "Submit a document for compliance audit against GDPR, PCI-DSS, ISO 27001, or SOC 2 with a human-in-the-loop review gate.",
+      parameters: Type.Object({
+        document_url: Type.String({ description: "Direct HTTPS URL to the document (PDF, DOCX, or image)" }),
+        framework: Type.String({ description: "Compliance framework: gdpr, pci_dss, iso_27001, soc2" }),
+        org_name: Type.String({ description: "Organization name" }),
+        document_id: Type.Optional(Type.String({ description: "Document ID (auto-generated if omitted)" }))
+      }),
+      async execute(_id, p) {
+        const config = cfg();
+        const contractId = `ctr-cmp-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.compliance.audit_hitl_v0",
+              policy_profile_ref: "policy.hitl.compliance.audit_v0",
+              initial_inputs: [
+                { key: "document_url", value: p.document_url },
+                { key: "framework", value: p.framework },
+                { key: "org_name", value: p.org_name },
+                { key: "document_id", value: p.document_id ?? `DOC-${shortId()}` }
+              ]
+            }
+          },
+          steps: COMPLIANCE_STEPS
+        });
+        return toolResult(await movaRunSteps(config, contractId));
+      }
+    });
+    api.registerTool({
+      name: "mova_hitl_start_credit",
+      label: "MOVA: Start Credit Scoring",
+      description: "Submit applicant data for automated credit risk scoring and human approval gate before issuing a credit decision.",
+      parameters: Type.Object({
+        applicant_id: Type.String({ description: "Applicant ID, e.g. APP-2026-0042" }),
+        monthly_income: Type.Number({ description: "Monthly income in local currency" }),
+        total_debt: Type.Number({ description: "Total existing debt" }),
+        credit_history_months: Type.Number({ description: "Months of credit history" }),
+        bureau_score: Type.Number({ description: "Credit bureau score" }),
+        requested_amount: Type.Number({ description: "Requested loan amount" }),
+        loan_purpose: Type.String({ description: "Loan purpose: home, auto, business, personal" })
+      }),
+      async execute(_id, p) {
+        const config = cfg();
+        const contractId = `ctr-crd-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.credit.scoring_hitl_v0",
+              policy_profile_ref: "policy.hitl.credit.scoring_v0",
+              initial_inputs: [
+                { key: "applicant_id", value: p.applicant_id },
+                { key: "monthly_income", value: String(p.monthly_income) },
+                { key: "total_debt", value: String(p.total_debt) },
+                { key: "credit_history_months", value: String(p.credit_history_months) },
+                { key: "bureau_score", value: String(p.bureau_score) },
+                { key: "requested_amount", value: String(p.requested_amount) },
+                { key: "loan_purpose", value: p.loan_purpose }
+              ]
+            }
+          },
+          steps: CREDIT_STEPS
+        });
+        return toolResult(await movaRunSteps(config, contractId));
+      }
+    });
+    api.registerTool({
+      name: "mova_hitl_start_supply_chain",
+      label: "MOVA: Start Supply Chain Risk Analysis",
+      description: "Screen a supplier list against sanctions, PEP registries, ESG ratings, and financial stability data with a human approval gate.",
+      parameters: Type.Object({
+        suppliers: Type.Array(Type.Object({
+          id: Type.String(),
+          name: Type.String(),
+          country: Type.String({ description: "ISO 3166-1 alpha-2, e.g. DE" })
+        }), { description: "List of suppliers to screen" }),
+        category: Type.String({ description: "Procurement category: raw_materials, logistics, technology, services" }),
+        requestor_id: Type.String({ description: "Requestor employee ID" })
+      }),
+      async execute(_id, p) {
+        const config = cfg();
+        const contractId = `ctr-scr-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.supply_chain.risk_hitl_v0",
+              policy_profile_ref: "policy.hitl.supply_chain.risk_v0",
+              initial_inputs: [
+                { key: "suppliers", value: JSON.stringify(p.suppliers) },
+                { key: "category", value: p.category },
+                { key: "requestor_id", value: p.requestor_id }
+              ]
+            }
+          },
+          steps: SUPPLY_CHAIN_STEPS
+        });
+        return toolResult(await movaRunSteps(config, contractId));
+      }
+    });
+    api.registerTool({
+      name: "mova_hitl_start_churn",
+      label: "MOVA: Start Churn Prediction",
+      description: "Analyze customer behavior signals to predict churn risk and route the retention campaign decision through a human approval gate.",
+      parameters: Type.Object({
+        segment_id: Type.String({ description: "Customer segment ID to analyze" }),
+        period_days: Type.Number({ description: "Days of activity history to analyze, e.g. 30" }),
+        threshold: Type.Number({ description: "Churn probability threshold (0.0\u20131.0), e.g. 0.7" }),
+        requestor_id: Type.String({ description: "Requestor employee ID" })
+      }),
+      async execute(_id, p) {
+        const config = cfg();
+        const contractId = `ctr-chu-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: "tpl.churn.prediction_hitl_v0",
+              policy_profile_ref: "policy.hitl.churn.prediction_v0",
+              initial_inputs: [
+                { key: "segment_id", value: p.segment_id },
+                { key: "period_days", value: String(p.period_days) },
+                { key: "threshold", value: String(p.threshold) },
+                { key: "requestor_id", value: p.requestor_id }
+              ]
+            }
+          },
+          steps: CHURN_STEPS
+        });
+        return toolResult(await movaRunSteps(config, contractId));
+      }
+    });
+    api.registerTool({
+      name: "mova_hitl_start_contract_gen",
+      label: "MOVA: Start Contract Generation",
+      description: "Generate a legal document (NDA, service agreement, supply contract, SLA) from a template with section-by-section human review gates.",
+      parameters: Type.Object({
+        doc_type: Type.String({ description: "Document type: nda, service_agreement, supply_contract, sla" }),
+        party_a: Type.String({ description: "Party A full name" }),
+        party_b: Type.String({ description: "Party B full name" }),
+        jurisdiction: Type.String({ description: "Governing law jurisdiction, e.g. DE, US-NY, EU" }),
+        effective_date: Type.String({ description: "Effective date in ISO format, e.g. 2026-04-01" }),
+        terms: Type.Optional(Type.Record(Type.String(), Type.Unknown(), { description: "Additional terms as key-value pairs" })),
+        template_id: Type.Optional(Type.String({ description: "Template ID (uses default if omitted)" }))
+      }),
+      async execute(_id, p) {
+        const config = cfg();
+        const contractId = `ctr-cng-${shortId()}`;
+        await movaPost(config, "/api/v1/contracts", {
+          envelope: {
+            kind: "env.contract.start_v0",
+            envelope_id: `env-${shortId()}`,
+            contract_id: contractId,
+            actor: { actor_type: "human", actor_id: "user" },
+            payload: {
+              template_id: p.template_id ?? `tpl.legal.${p.doc_type}_hitl_v0`,
+              policy_profile_ref: "policy.hitl.legal.contract_gen_v0",
+              initial_inputs: [
+                { key: "doc_type", value: p.doc_type },
+                { key: "party_a", value: p.party_a },
+                { key: "party_b", value: p.party_b },
+                { key: "jurisdiction", value: p.jurisdiction },
+                { key: "effective_date", value: p.effective_date },
+                { key: "terms", value: JSON.stringify(p.terms ?? {}) }
+              ]
+            }
+          },
+          steps: CONTRACT_GEN_STEPS
         });
         return toolResult(await movaRunSteps(config, contractId));
       }
