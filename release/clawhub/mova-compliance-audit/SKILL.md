@@ -1,115 +1,140 @@
 ---
 name: mova-compliance-audit
-description: Run a MOVA compliance audit on uploaded documents against regulatory frameworks (GDPR, PCI-DSS, ISO 27001, SOC 2). Trigger when the user uploads a document for compliance review, mentions a regulatory check, or asks to validate documents against a compliance standard. Each audit step is human-gated and produces a signed audit receipt.
+description: Submit documents for AI-powered compliance audit against GDPR, PCI-DSS, ISO 27001, or SOC 2 via MOVA HITL. Trigger when the user uploads a document and mentions compliance, regulation, or audit, asks to validate against a regulatory framework, or says "check GDPR compliance", "run PCI-DSS audit", "validate ISO 27001". Human sign-off is mandatory before any audit report is finalized.
 license: MIT-0
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"document URL or ID, organization name, selected regulatory framework, AI findings, human decision, audit metadata"},{"service":"Document OCR connector (read-only)","data":"document content extracted for structure parsing and checklist evaluation"},{"service":"Compliance rules engine connector (read-only)","data":"document structure evaluated against framework-specific rule set"}]}}
 ---
 
 # MOVA Compliance Audit
 
-## What this skill does
+Submit an organization's documents to MOVA for automated regulatory compliance audit — with framework-specific rule matching, a structured findings report, and a mandatory human sign-off gate backed by a tamper-proof audit trail.
 
-Runs a multi-stage compliance audit with full human-in-the-loop control:
+## What it does
 
-1. **Document ingestion** — OCR extraction and structure parsing
-2. **Rules engine check** — automated comparison against the selected regulatory framework (GDPR, PCI-DSS, ISO 27001, SOC 2)
-3. **Findings report** — checklist with pass/fail items and recommended actions
-4. **Human gate** — compliance officer reviews findings and signs off or requests corrections
+1. **Document ingestion** — OCR extraction and structure parsing from uploaded file or URL
+2. **Rules engine check** — automated evaluation against the selected regulatory framework (GDPR, PCI-DSS, ISO 27001, SOC 2)
+3. **Findings report** — checklist with pass/fail items, severity codes, and recommended remediation actions
+4. **Human gate** — compliance officer reviews findings and chooses: approve / approve with conditions / reject / request corrections
+5. **Audit receipt** — every check, source, and decision is signed, timestamped, and stored in an immutable MOVA audit trail for regulatory inspection
 
-Every stage — upload, parse, check, report, sign-off — is recorded in the MOVA audit journal.
+**Mandatory escalation rules enforced by policy:**
+- Critical findings present → mandatory human review, cannot auto-approve
+- Regulated framework (GDPR, PCI-DSS) → full audit report artifact required
+- Rejection or conditions → remediation items must be recorded with reason
+
+## Requirements
+
+**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
+Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+
+**Data flows:**
+- Document URL/ID + org metadata → `api.mova-lab.eu` (MOVA platform, EU-hosted)
+- Document content → OCR extraction connector (read-only, no data stored)
+- Extracted structure → compliance rules engine (framework-specific, read-only)
+- Audit journal → MOVA R2 storage, cryptographically signed, accessible only via your API key
+- No data sent to third parties beyond the above
+
+## Quick start
+
+Say "run GDPR compliance audit on this document" and provide a document URL or ID:
+
+```
+document_url: https://example.com/privacy-policy.pdf
+framework: gdpr
+org_name: Acme Corp
+```
+
+The agent submits the document, shows the AI findings checklist with pass/fail items and severity, then asks for your compliance decision.
+
+## Why contract execution matters
+
+- **Framework rules are policy, not prompts** — GDPR and PCI-DSS checks trigger mandatory gates that cannot be bypassed by the AI
+- **Full checklist traceability** — every pass/fail item is linked to a specific rule ID and source citation
+- **Immutable audit trail** — when a regulator asks "who signed off this audit and what did they see?" — the answer is in the system with an exact timestamp
+- **EU AI Act / GDPR Article 22 ready** — automated compliance decisions require human oversight, full explainability, and a documented decision chain
+
+## What the user receives
+
+| Output | Description |
+|--------|-------------|
+| Framework | Selected regulatory standard (GDPR, PCI-DSS, ISO 27001, SOC 2) |
+| Checklist score | Pass / fail count per framework section |
+| Critical findings | Count and list of critical violations |
+| Findings list | Per-item: rule ID, description, severity (critical / high / medium / low) |
+| Remediation hints | Recommended corrective actions per finding |
+| Recommended action | AI-suggested compliance decision |
+| Decision options | approve / approve_with_conditions / reject / request_corrections |
+| Audit receipt ID | Permanent signed record of the compliance decision |
+| Compact journal | Full event log: ingest → rules check → human decision |
 
 ## When to trigger
 
 Activate when the user:
 - Uploads a document and mentions compliance, regulation, or audit
-- Says "check GDPR compliance", "run PCI-DSS audit", "validate ISO 27001"
+- Says "check GDPR compliance", "run PCI-DSS audit", "validate ISO 27001", "SOC 2 check"
 - Asks to prepare for a regulatory inspection
 
-**Before starting**, confirm: "Запустить compliance-аудит через MOVA? (фреймворк: FRAMEWORK)"
+**Before starting**, confirm: "Run compliance audit on [document] — framework: [FRAMEWORK]?"
 
 If framework is not specified — ask once: GDPR, PCI-DSS, ISO 27001, or SOC 2.
-If document URL is missing — ask once for a direct HTTPS link.
+If document URL is missing — ask once for a direct HTTPS link or document ID.
 
 ## Step 1 — Submit document for audit
 
-Run exec:
-
-    mova-bridge call mova_hitl_start_compliance \
-      --document-url URL \
-      --framework FRAMEWORK \
-      --document-id DOC_ID \
-      --org-name "ORG_NAME"
-
-Replace URL, FRAMEWORK (gdpr / pci_dss / iso_27001 / soc2), DOC_ID, ORG_NAME. Wait for JSON output.
+Call tool `mova_hitl_start_compliance` with:
+- `document_url`: direct HTTPS link to the document
+- `document_id`: unique identifier (e.g. DOC-2026-001)
+- `framework`: one of `gdpr` / `pci_dss` / `iso_27001` / `soc2`
+- `org_name`: organization name
 
 ## Step 2 — Show findings and decision options
 
 If `status = "waiting_human"` — show the audit findings summary:
 
-    Document:   DOC_ID
-    Framework:  FRAMEWORK
-    Score:      PASS_COUNT / TOTAL_CHECKS passed
-    Critical:   CRITICAL_COUNT critical findings
-    Findings:   [list top findings with severity]
+```
+Document:   document_id
+Framework:  FRAMEWORK
+Score:      PASS_COUNT / TOTAL_CHECKS passed
+Critical:   CRITICAL_COUNT critical findings
+Findings:   [list top findings with rule ID and severity]
+Recommended action: ACTION ← RECOMMENDED
+```
 
 Then ask compliance officer to choose:
 
-- **approve** — Sign off audit report as compliant
-- **approve_with_conditions** — Approve with listed remediation items
-- **reject** — Document fails compliance — block processing
-- **request_corrections** — Return document for corrections
+| Option | Description |
+|---|---|
+| `approve` | Sign off audit report as compliant |
+| `approve_with_conditions` | Approve with listed remediation items |
+| `reject` | Document fails compliance — block processing |
+| `request_corrections` | Return document for corrections |
 
-Then run exec:
-
-    mova-bridge call mova_hitl_decide --contract-id CONTRACT_ID --option OPTION --reason "REASON"
+Call tool `mova_hitl_decide` with:
+- `contract_id`: from the response above — this is `ctr-cau-xxxxxxxx`, NOT the document ID
+- `option`: chosen decision
+- `reason`: officer reasoning (required for reject and request_corrections)
 
 ## Step 3 — Show audit receipt
 
-If `status = "completed"`:
-
-    ✅ Audit [DOC_ID] — CONTRACT_ID
-
-    Framework:     FRAMEWORK
-    Decision:      OPTION
-    Audit receipt: AUDIT_RECEIPT_ID
-
-## Other commands
-
-    mova-bridge call mova_hitl_status --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
+Call tool `mova_hitl_audit` with `contract_id`.
+Call tool `mova_hitl_audit_compact` with `contract_id` for the full signed event chain.
 
 ## Connect your real compliance systems
 
-By default MOVA uses a sandbox mock. To use your real infrastructure:
+By default MOVA uses a sandbox mock. To route checks against your live infrastructure, call `mova_list_connectors` with `keyword: "compliance"`.
 
-    # See available compliance connectors
-    mova-bridge call mova_list_connectors --keyword compliance
+Relevant connectors:
 
-    # Register your document extraction endpoint
-    mova-bridge call mova_register_connector \
-      --connector-id connector.ocr.document_extract_v1 \
-      --endpoint https://your-ocr.example.com/api/extract \
-      --label "Production OCR" \
-      --auth-header X-Api-Key \
-      --auth-value YOUR_KEY
+| Connector ID | What it covers |
+|---|---|
+| `connector.ocr.document_extract_v1` | Document OCR and structure extraction |
+| `connector.compliance.rules_engine_v1` | Framework-specific compliance rule evaluation |
 
-    # Register your rules engine endpoint
-    mova-bridge call mova_register_connector \
-      --connector-id connector.compliance.rules_engine_v1 \
-      --endpoint https://your-compliance.example.com/api/check \
-      --label "Compliance Rules Engine" \
-      --auth-header X-Api-Key \
-      --auth-value YOUR_KEY
-
-After registration all contracts in your org use your endpoint instead of the mock.
-To revert: `mova-bridge call mova_delete_connector_override --connector-id CONNECTOR_ID`
-
-If the user asks "how do I connect my real systems" — walk through these steps.
+Call `mova_register_connector` with `connector_id`, `endpoint`, optional `auth_header` and `auth_value`.
 
 ## Rules
 
 - NEVER make HTTP requests manually
-- NEVER construct JSON payloads for MOVA API
-- NEVER invent or simulate compliance results
-- If exec fails — show the exact error, do not retry via HTTP
-- Run exec command directly: mova-bridge call ... (not wrapped in bash)
+- NEVER invent or simulate compliance results — if a tool call fails, show the exact error
+- Use MOVA plugin tools directly — do NOT use exec or shell
+- CONTRACT_ID is `ctr-cau-xxxxxxxx` from the mova_hitl_start_compliance response — NOT the document ID

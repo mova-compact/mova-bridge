@@ -1,115 +1,145 @@
 ---
 name: mova-supply-chain-risk
-description: Run a MOVA supply chain risk analysis — screen suppliers against sanctions lists, PEP registries, ESG ratings, and financial stability data, then route findings through a human approval gate. Trigger when the user provides a supplier list, asks to screen vendors, or requests a supply chain due diligence report. Mandatory human sign-off before any procurement decision.
+description: Screen suppliers against sanctions lists, PEP registries, ESG ratings, and financial stability data via MOVA HITL, then route findings through a human procurement decision gate. Trigger when the user provides a supplier list, asks to screen vendors, or requests a supply chain due diligence report. Mandatory human sign-off before any procurement decision.
 license: MIT-0
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"supplier names, IDs, country of registration, procurement category, AI risk bands, human decision, audit metadata"},{"service":"Sanctions & PEP screening connector (read-only)","data":"supplier name and country screened against OFAC, EU, UN lists and PEP registries"},{"service":"ESG ratings connector (read-only)","data":"supplier ID for ESG score and adverse media lookup"},{"service":"Company registry connector (read-only)","data":"supplier name and country for registration status and financial stability check"}]}}
 ---
 
 # MOVA Supply Chain Risk Analysis
 
-## What this skill does
+Screen your supplier list against sanctions registries, PEP databases, ESG ratings, and financial stability indicators — with a per-supplier risk band, source citations, and a mandatory human procurement decision gate backed by a tamper-proof audit trail.
 
-Runs a full supplier due diligence workflow:
+## What it does
 
-1. **Supplier ingestion** — accepts a list of supplier names, IDs, or a CSV
-2. **Multi-source screening** — sanctions (OFAC/EU/UN), PEP registries, ESG ratings, financial stability, adverse media
-3. **Risk report** — per-supplier risk band (low / medium / high / critical) with source citations
-4. **Human gate** — procurement manager reviews findings and approves/blocks suppliers
+1. **Supplier ingestion** — accepts a list of supplier names, IDs, countries, and procurement category
+2. **Multi-source screening** — OFAC / EU / UN sanctions, PEP registries, ESG ratings, adverse media, financial stability
+3. **Risk report** — per-supplier risk band (low / medium / high / critical) with source citations and finding details
+4. **Human gate** — procurement manager reviews findings and chooses: approve all / approve clean only / reject all / escalate
+5. **Audit receipt** — all data sources, query timestamps, screening results, and the human decision are logged for supply chain transparency audits
 
-All data sources, query timestamps, screening results, and the human decision are recorded in the MOVA audit journal — demonstrating supply chain transparency to auditors and partners.
+**Mandatory escalation rules enforced by policy:**
+- Sanctions hit on any supplier → immediate escalation, cannot approve batch
+- Critical risk band (≥ 2 suppliers) → mandatory escalation to compliance team
+- PEP flag with procurement value above threshold → escalate required
+
+## Requirements
+
+**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
+Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+
+**Data flows:**
+- Supplier data + procurement category → `api.mova-lab.eu` (MOVA platform, EU-hosted)
+- Supplier names/countries → sanctions & PEP screening (OFAC, EU, UN — read-only)
+- Supplier IDs → ESG ratings and adverse media lookup (read-only)
+- Supplier name/country → company registry and financial stability check (read-only)
+- Audit journal → MOVA R2 storage, signed, accessible only via your API key
+- No data stored locally or sent to third parties beyond the above
+
+## Quick start
+
+Say "screen these suppliers for procurement" and provide:
+
+```
+suppliers:
+  - id: SUP-001, name: Acme GmbH, country: DE
+  - id: SUP-002, name: Delta LLC, country: US
+category: raw_materials
+requestor_id: EMP-2201
+```
+
+The agent submits the batch, shows the per-supplier risk report with sanctions and ESG findings, then asks for your procurement decision.
+
+## Why contract execution matters
+
+- **Sanctions rules are policy, not prompts** — any sanctions hit triggers mandatory escalation that cannot be bypassed
+- **Multi-source traceability** — every finding is tagged with its source (OFAC / EU / UN / ESG / registry)
+- **Immutable audit trail** — when a compliance officer or regulator asks "who cleared supplier SUP-002 and why?" — the answer is in the system
+- **EU Supply Chain Due Diligence / OFAC ready** — procurement decisions require documented screening history, source citations, and human sign-off
+
+## What the user receives
+
+| Output | Description |
+|--------|-------------|
+| Suppliers screened | Total count in batch |
+| Critical / high / medium / low | Count per risk band |
+| Per-supplier risk band | low / medium / high / critical |
+| Sanctions result | OFAC / EU / UN hit or clear with match details |
+| PEP flag | PEP status and category |
+| ESG score | Rating and adverse media flags |
+| Financial stability | Registration status, insolvency signals |
+| Findings | Per-supplier structured list with source and severity |
+| Recommended action | AI-suggested decision |
+| Decision options | approve_all / approve_clean / reject_all / escalate |
+| Audit receipt ID | Permanent signed record of the procurement decision |
+| Compact journal | Full event log: screening → risk report → human decision |
 
 ## When to trigger
 
 Activate when the user:
-- Provides a supplier list (CSV, names, IDs)
+- Provides a supplier list (names, IDs, or CSV)
 - Says "screen these vendors", "run supply chain check", "due diligence on supplier"
-- Asks to prepare a procurement risk report
+- Asks to prepare a procurement risk report before signing contracts
 
-**Before starting**, confirm: "Запустить анализ рисков цепочки поставок через MOVA? (поставщиков: COUNT)"
+**Before starting**, confirm: "Screen [COUNT] suppliers for MOVA supply chain risk analysis?"
 
-If supplier data is missing — ask once for: supplier names/IDs, country of registration, and procurement category.
+If supplier data is missing — ask once for: supplier names/IDs, country of registration, procurement category.
 
 ## Step 1 — Submit supplier list for screening
 
-Run exec:
-
-    mova-bridge call mova_hitl_start_supply_chain \
-      --suppliers '[{"id":"SUP-001","name":"Acme GmbH","country":"DE"},{"id":"SUP-002","name":"Delta LLC","country":"US"}]' \
-      --category CATEGORY \
-      --requestor-id REQUESTOR_ID
-
-Replace with actual supplier data and category (raw_materials / logistics / technology / services). Wait for JSON output.
+Call tool `mova_hitl_start_supply_chain` with:
+- `suppliers`: array of objects with `id`, `name`, `country` (ISO 3166-1 alpha-2)
+- `category`: raw_materials / logistics / technology / services
+- `requestor_id`: employee ID of the procurement requestor
 
 ## Step 2 — Show risk report and decision options
 
 If `status = "waiting_human"` — show the screening summary:
 
-    Suppliers screened: COUNT
-    Critical findings:  CRITICAL_COUNT
-    High risk:          HIGH_COUNT
-    Clean:              CLEAN_COUNT
+```
+Suppliers screened: COUNT
+Critical:           CRITICAL_COUNT
+High risk:          HIGH_COUNT
+Clean:              CLEAN_COUNT
 
-    [Per-supplier table: ID | Name | Risk | Findings]
+[Per-supplier table: ID | Name | Country | Risk band | Top finding]
+Recommended action: ACTION ← RECOMMENDED
+```
 
-Then ask procurement manager to choose:
+| Option | Description |
+|---|---|
+| `approve_all` | Approve all screened suppliers |
+| `approve_clean` | Approve only clean suppliers, block high-risk |
+| `reject_all` | Block entire batch pending further review |
+| `escalate` | Escalate to compliance team |
 
-- **approve_all** — Approve all screened suppliers
-- **approve_clean** — Approve only clean suppliers, block high-risk
-- **reject_all** — Block entire batch pending further review
-- **escalate** — Escalate to compliance team
-
-Then run exec:
-
-    mova-bridge call mova_hitl_decide --contract-id CONTRACT_ID --option OPTION --reason "REASON"
+Call tool `mova_hitl_decide` with:
+- `contract_id`: from the response above — this is `ctr-scr-xxxxxxxx`, NOT a supplier ID
+- `option`: chosen decision
+- `reason`: procurement manager reasoning (required for reject_all and escalate)
 
 ## Step 3 — Show audit receipt
 
-If `status = "completed"`:
-
-    ✅ Supply chain audit — CONTRACT_ID
-
-    Decision:      OPTION
-    Suppliers:     COUNT screened
-    Audit receipt: AUDIT_RECEIPT_ID
-
-## Other commands
-
-    mova-bridge call mova_hitl_status --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
+Call tool `mova_hitl_audit` with `contract_id`.
+Call tool `mova_hitl_audit_compact` with `contract_id` for the full signed screening chain.
 
 ## Connect your real screening systems
 
-By default MOVA uses a sandbox mock. To use your real infrastructure:
+By default MOVA uses a sandbox mock. To route checks against your live infrastructure, call `mova_list_connectors` with `keyword: "supply"`.
 
-    # See available supply chain connectors
-    mova-bridge call mova_list_connectors --keyword supply
+Relevant connectors:
 
-    # Register your sanctions screening endpoint
-    mova-bridge call mova_register_connector \
-      --connector-id connector.screening.pep_sanctions_v1 \
-      --endpoint https://your-screening.example.com/api/check \
-      --label "Sanctions & PEP Screening" \
-      --auth-header X-Api-Key \
-      --auth-value YOUR_KEY
+| Connector ID | What it covers |
+|---|---|
+| `connector.screening.pep_sanctions_v1` | PEP & sanctions screening (OFAC, EU, UN) |
+| `connector.esg.ratings_v1` | ESG ratings and adverse media |
+| `connector.data.company_registry_v1` | Company registration status |
+| `connector.data.company_enrichment_v1` | Financial stability and enrichment data |
 
-    # Register your ESG ratings endpoint
-    mova-bridge call mova_register_connector \
-      --connector-id connector.esg.ratings_v1 \
-      --endpoint https://your-esg.example.com/api/ratings \
-      --label "ESG Ratings Provider" \
-      --auth-header X-Api-Key \
-      --auth-value YOUR_KEY
-
-After registration all contracts in your org use your endpoint instead of the mock.
-To revert: `mova-bridge call mova_delete_connector_override --connector-id CONNECTOR_ID`
-
-If the user asks "how do I connect my real systems" — walk through these steps.
+Call `mova_register_connector` with `connector_id`, `endpoint`, optional `auth_header` and `auth_value`.
 
 ## Rules
 
 - NEVER make HTTP requests manually
-- NEVER construct JSON payloads for MOVA API
-- NEVER invent or simulate screening results
-- Human approval is mandatory before approving any supplier
-- If exec fails — show the exact error, do not retry via HTTP
-- Run exec command directly: mova-bridge call ... (not wrapped in bash)
+- NEVER invent or simulate screening results — if a tool call fails, show the exact error
+- Use MOVA plugin tools directly — do NOT use exec or shell
+- CONTRACT_ID is `ctr-scr-xxxxxxxx` from the mova_hitl_start_supply_chain response — NOT a supplier ID

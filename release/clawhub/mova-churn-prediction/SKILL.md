@@ -1,118 +1,144 @@
 ---
 name: mova-churn-prediction
-description: Run a MOVA churn prediction workflow — analyze customer behavior signals, generate a high-risk churn list, and route retention campaign decisions through a human approval gate. Trigger when the user asks to predict customer churn, requests a retention analysis, or provides customer activity data for risk scoring. Human sign-off is required before any targeted retention action is launched.
+description: Analyze customer behavior signals to predict churn probability and route retention campaign decisions through a human approval gate via MOVA HITL. Trigger when the user asks to predict customer churn, requests a retention analysis, or wants to identify at-risk customers. Human sign-off is required before any targeted retention action is launched.
 license: MIT-0
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"segment ID, analysis period, customer behavior features, churn probability scores, model version, human decision, audit metadata"},{"service":"Customer events connector (read-only)","data":"customer activity signals (logins, transactions, support tickets, feature usage) for the specified segment and period"},{"service":"Churn model connector (read-only)","data":"customer feature vectors evaluated by churn prediction model"},{"service":"CRM connector (read-only)","data":"customer profile and segment metadata lookup"}]}}
 ---
 
 # MOVA Churn Prediction
 
-## What this skill does
+Run an AI churn risk assessment on your customer segment — get a ranked at-risk list with contributing factor breakdown, then route the retention campaign decision through a mandatory human approval gate with a full audit trail.
 
-Runs a transparent churn risk assessment workflow:
+## What it does
 
-1. **Behavior ingestion** — customer activity signals (logins, transactions, support tickets, feature usage)
-2. **Churn model** — probability score per customer with contributing factor breakdown
-3. **High-risk list** — ranked list of at-risk customers with recommended retention actions
-4. **Human gate** — customer success manager reviews the list and approves the retention campaign
+1. **Behavior ingestion** — customer activity signals (logins, transactions, support tickets, feature usage) for the specified segment and period
+2. **Churn model** — probability score per customer (0.0–1.0) with contributing factor breakdown
+3. **High-risk list** — ranked list of at-risk customers above threshold with recommended retention actions
+4. **Human gate** — customer success manager reviews the list and chooses: launch campaign / launch selective / defer / escalate
+5. **Audit receipt** — input features, model version, prediction scores, and human approval are all logged
 
-All input features, model version, prediction scores, and the human approval are recorded in the MOVA audit journal — providing investors and regulators with proof that retention actions are based on verified, consistent processes.
+**Escalation rules enforced by policy:**
+- GDPR check required before any customer is targeted — consent and legitimate interest must be confirmed
+- Model version drift (> 90 days) → recommend review before launch
+- Campaigns above budget threshold → escalate to VP required
+
+## Requirements
+
+**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
+Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+
+**Data flows:**
+- Segment ID + period + threshold → `api.mova-lab.eu` (MOVA platform, EU-hosted)
+- Customer activity data → events connector (read-only, no raw data stored by MOVA)
+- Feature vectors → churn model connector (inference only, read-only)
+- Customer profiles → CRM connector (read-only)
+- Audit journal → MOVA R2 storage, signed, accessible only via your API key
+- No data sent to third parties beyond the above
+
+## Quick start
+
+Say "run churn analysis for segment SEG-ENTERPRISE over the last 30 days":
+
+```
+segment_id: SEG-ENTERPRISE
+period_days: 30
+threshold: 0.70
+requestor_id: EMP-0441
+```
+
+The agent fetches behavior signals, scores churn probability per customer, shows the ranked at-risk list with top contributing factors, then asks for your retention decision.
+
+## Why contract execution matters
+
+- **GDPR compliance built in** — policy enforces consent check before any customer is targeted, not left to the agent's discretion
+- **Model version tracking** — the exact model version used for scoring is locked in the audit trail, enabling reproducibility audits
+- **Immutable decision record** — when a customer asks "why did I receive this offer?" or an auditor asks "who approved this campaign?" — the answer is in the system
+- **EU AI Act / GDPR Article 22 ready** — automated profiling for targeted campaigns requires documented human oversight
+
+## What the user receives
+
+| Output | Description |
+|--------|-------------|
+| Customers analyzed | Total in segment |
+| At-risk count | Above threshold |
+| Avg churn score | Average probability for at-risk group |
+| Per-customer score | 0.0–1.0 churn probability |
+| Top contributing factors | Feature breakdown (e.g. login drop, support volume) |
+| Model version | Scoring model identifier and date |
+| Recommended retention actions | Per-customer suggested action |
+| Recommended decision | AI-suggested campaign choice |
+| Decision options | launch_campaign / launch_selective / defer / escalate |
+| Audit receipt ID | Permanent signed record of the campaign decision |
+| Compact journal | Full event log: feature pull → scoring → human decision |
 
 ## When to trigger
 
 Activate when the user:
 - Asks to predict churn, run retention analysis, or identify at-risk customers
-- Provides customer event data (CSV, segment ID, date range)
+- Provides a segment ID or cohort with a date range
 - Sets up a scheduled churn review (weekly / monthly)
 
-**Before starting**, confirm: "Запустить анализ оттока клиентов через MOVA? (сегмент: SEGMENT, период: PERIOD)"
+**Before starting**, confirm: "Run churn analysis for segment [SEG-ID] — last [N] days?"
 
-If required data is missing — ask once for: segment ID or customer cohort, analysis period (e.g. last 30 days), and minimum churn probability threshold.
+If segment ID or period is missing — ask once.
 
-## Step 1 — Submit customer data for churn analysis
+## Step 1 — Submit customer segment for analysis
 
-Run exec:
-
-    mova-bridge call mova_hitl_start_churn \
-      --segment-id SEGMENT_ID \
-      --period-days DAYS \
-      --threshold THRESHOLD \
-      --requestor-id REQUESTOR_ID
-
-Replace SEGMENT_ID, DAYS (e.g. 30), THRESHOLD (e.g. 0.7 for 70% probability). Wait for JSON output.
+Call tool `mova_hitl_start_churn` with:
+- `segment_id`: customer segment or cohort identifier
+- `period_days`: lookback period in days (e.g. 30)
+- `threshold`: minimum churn probability to include in at-risk list (e.g. 0.70)
+- `requestor_id`: employee ID of the requestor
 
 ## Step 2 — Show at-risk list and decision options
 
-If `status = "waiting_human"` — show the churn summary:
+If `status = "waiting_human"` — show the churn summary and ask to choose:
 
-    Segment:         SEGMENT_ID
-    Period:          DAYS days
-    Customers at risk: COUNT  (above THRESHOLD threshold)
-    Avg churn score:   AVG_SCORE
+```
+Segment:           SEG-ID
+Period:            N days
+Customers at risk: COUNT  (above THRESHOLD)
+Avg churn score:   AVG
 
-    Top at-risk customers:
-    [ID | Name | Score | Top factor]
+Top at-risk customers:
+[ID | Name | Score | Top factor]
+Recommended action: ACTION ← RECOMMENDED
+```
 
-Then ask customer success manager to choose:
+| Option | Description |
+|---|---|
+| `launch_campaign` | Launch retention campaign for all high-risk customers |
+| `launch_selective` | Launch for top-N only (specify N in reason) |
+| `defer` | Defer to next review cycle |
+| `escalate` | Escalate to VP of Customer Success |
 
-- **launch_campaign** — Launch retention campaign for all high-risk customers
-- **launch_selective** — Launch campaign for top-N only (specify N in reason)
-- **defer** — Defer to next review cycle
-- **escalate** — Escalate to VP of Customer Success
-
-Then run exec:
-
-    mova-bridge call mova_hitl_decide --contract-id CONTRACT_ID --option OPTION --reason "REASON"
+Call tool `mova_hitl_decide` with:
+- `contract_id`: from the response above — this is `ctr-chn-xxxxxxxx`, NOT the segment ID
+- `option`: chosen decision
+- `reason`: manager reasoning
 
 ## Step 3 — Show audit receipt
 
-If `status = "completed"`:
-
-    ✅ Churn analysis [segment_id] — CONTRACT_ID
-
-    Decision:      OPTION
-    Customers:     COUNT analyzed
-    Model version: MODEL_VERSION
-    Audit receipt: AUDIT_RECEIPT_ID
-
-## Other commands
-
-    mova-bridge call mova_hitl_status --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
+Call tool `mova_hitl_audit` with `contract_id`.
+Call tool `mova_hitl_audit_compact` with `contract_id` for the full signed scoring chain.
 
 ## Connect your real data systems
 
-By default MOVA uses a sandbox mock. To use your real infrastructure:
+By default MOVA uses a sandbox mock. To route analysis against your live infrastructure, call `mova_list_connectors` with `keyword: "churn"`.
 
-    # See available churn connectors
-    mova-bridge call mova_list_connectors --keyword churn
+Relevant connectors:
 
-    # Register your customer event stream endpoint
-    mova-bridge call mova_register_connector \
-      --connector-id connector.analytics.customer_events_v1 \
-      --endpoint https://your-analytics.example.com/api/events \
-      --label "Customer Event Stream" \
-      --auth-header X-Api-Key \
-      --auth-value YOUR_KEY
+| Connector ID | What it covers |
+|---|---|
+| `connector.analytics.customer_events_v1` | Customer activity event stream |
+| `connector.ml.churn_model_v1` | Churn prediction model (inference endpoint) |
+| `connector.crm.customer_lookup_v1` | Customer profile and segment metadata |
 
-    # Register your churn model endpoint
-    mova-bridge call mova_register_connector \
-      --connector-id connector.ml.churn_model_v1 \
-      --endpoint https://your-ml.example.com/api/predict \
-      --label "Churn Prediction Model" \
-      --auth-header X-Api-Key \
-      --auth-value YOUR_KEY
-
-After registration all contracts in your org use your endpoint instead of the mock.
-To revert: `mova-bridge call mova_delete_connector_override --connector-id CONNECTOR_ID`
-
-If the user asks "how do I connect my real systems" — walk through these steps.
+Call `mova_register_connector` with `connector_id`, `endpoint`, optional `auth_header` and `auth_value`.
 
 ## Rules
 
 - NEVER make HTTP requests manually
-- NEVER construct JSON payloads for MOVA API
-- NEVER invent or simulate churn scores
-- Human approval is mandatory before any retention campaign is launched
-- If exec fails — show the exact error, do not retry via HTTP
-- Run exec command directly: mova-bridge call ... (not wrapped in bash)
+- NEVER invent or simulate churn scores — if a tool call fails, show the exact error
+- Use MOVA plugin tools directly — do NOT use exec or shell
+- CONTRACT_ID is `ctr-chn-xxxxxxxx` from the mova_hitl_start_churn response — NOT the segment ID

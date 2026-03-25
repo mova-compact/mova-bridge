@@ -1,119 +1,149 @@
 ---
 name: mova-credit-scoring
-description: Run a MOVA credit scoring workflow — submit applicant data, get an automated risk score, and route the result through a human approval gate before issuing a credit decision. Trigger when the user submits loan application data, asks to score a borrower, or requests a credit risk assessment. Human sign-off is mandatory before any credit offer is issued.
+description: Submit a loan application for AI credit risk scoring and human-gated credit decision via MOVA HITL. Trigger when the user mentions a loan application, credit assessment, borrower review, or asks to score credit risk. Human credit officer approval is mandatory before any credit decision is issued.
 license: MIT-0
+metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"applicant ID, financial data (income, debt, requested amount), bureau score, AI risk band, human decision, audit metadata"},{"service":"Credit scoring model connector (read-only)","data":"applicant financial features evaluated against scoring model"},{"service":"Credit bureau connector (read-only)","data":"applicant ID used for bureau score and credit history lookup"}]}}
 ---
 
 # MOVA Credit Scoring
 
-## What this skill does
+Submit a loan application to MOVA for automated credit risk scoring — with explainable risk band, bureau check, and a mandatory human credit officer decision gate backed by a full audit trail.
 
-Runs a transparent, auditable credit scoring workflow:
+## What it does
 
-1. **Data ingestion** — applicant parameters (income, debt, history, bureau score)
-2. **Scoring model** — automated risk calculation with explainability breakdown
-3. **Risk snapshot** — score, recommended limit, risk band, key factors
-4. **Human gate** — credit officer reviews model output and issues final decision
+1. **Risk scoring** — AI evaluates income, debt-to-income ratio, bureau score, and repayment history against the scoring model
+2. **Risk band** — applicant assigned a risk band (excellent / good / fair / poor / very_poor) with score 0–1000
+3. **Credit limit recommendation** — AI suggests approved amount based on risk band and requested amount
+4. **Human gate** — credit officer reviews the scoring breakdown and chooses: approve / approve at reduced limit / reject / request more info
+5. **Audit receipt** — model version, all input features, the human identity, and the decision timestamp are logged for regulatory accountability
 
-All inputs, model version, calculation parameters, and the human signature are recorded in the MOVA audit journal — required for regulatory accountability and dispute resolution.
+**Mandatory escalation rules enforced by policy:**
+- Risk band poor or very_poor → mandatory human review, cannot auto-approve
+- Requested amount above threshold → always routes to human gate
+- Bureau score missing or frozen → request_info required, no auto-decision
+
+## Requirements
+
+**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
+Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+
+**Data flows:**
+- Applicant ID + financial data → `api.mova-lab.eu` (MOVA platform, EU-hosted)
+- Financial features → credit scoring model (server-side, read-only)
+- Applicant ID → credit bureau (read-only, no data stored)
+- Audit journal → MOVA R2 storage, signed, accessible only via your API key
+- No data sent to third parties beyond the above
+
+## Quick start
+
+Say "score credit application APP-2026-0041 for applicant CUST-1501" and provide:
+
+```
+applicant_id: CUST-1501
+application_id: APP-2026-0041
+requested_amount_eur: 25000
+annual_income_eur: 48000
+monthly_debt_eur: 800
+bureau_score: 610
+employment_status: employed
+```
+
+The agent submits the application, shows the AI risk band and score breakdown, then asks for the credit officer's decision.
+
+## Why contract execution matters
+
+- **Scoring rules are policy, not prompts** — poor risk bands and high amounts trigger mandatory gates that cannot be bypassed
+- **Full explainability** — every contributing factor (income, debt ratio, bureau score) is surfaced with its weight
+- **Immutable audit trail** — when a regulator or applicant challenges a rejection, the complete scoring chain with timestamps is in the system
+- **EU AI Act / CRD VI / EBA GL ready** — credit decisions are high-risk AI outputs requiring human oversight, explainability, and a documented decision chain
+
+## What the user receives
+
+| Output | Description |
+|--------|-------------|
+| Credit score | 0–1000 numerical score |
+| Risk band | excellent / good / fair / poor / very_poor |
+| Debt-to-income ratio | Calculated from input data |
+| Bureau result | Bureau score + credit history summary |
+| Anomaly flags | high_dti, low_bureau_score, short_history, missing_bureau |
+| Findings | Structured list with severity codes |
+| Recommended credit limit | AI-suggested approved amount |
+| Recommended action | AI-suggested decision |
+| Decision options | approve / approve_reduced / reject / request_info |
+| Audit receipt ID | Permanent signed record of the credit decision |
+| Compact journal | Full event log: scoring → bureau check → human decision |
 
 ## When to trigger
 
 Activate when the user:
-- Submits borrower or applicant data for evaluation
-- Says "score this borrower", "run credit check", "assess loan risk"
-- Provides a CSV or API payload with applicant financial parameters
+- Mentions an application ID or loan request (e.g. "APP-2026-0041")
+- Says "score credit", "credit assessment", "loan decision", "assess borrower", "credit risk review"
+- Provides applicant financial data for a lending decision
 
-**Before starting**, confirm: "Запустить кредитный скоринг через MOVA для [applicant_id]?"
+**Before starting**, confirm: "Submit application [APP-ID] for MOVA credit scoring?"
 
-If required fields are missing — ask once for: applicant ID, monthly income, total debt, credit history months, bureau score, requested loan amount.
+If applicant ID or requested amount is missing — ask once.
 
-## Step 1 — Submit applicant data for scoring
+## Step 1 — Submit loan application
 
-Run exec:
+Call tool `mova_hitl_start_credit` with:
+- `application_id`: application reference (e.g. APP-2026-0041)
+- `applicant_id`: customer/borrower ID
+- `requested_amount_eur`: loan amount requested
+- `annual_income_eur`: applicant annual income
+- `monthly_debt_eur`: existing monthly debt obligations
+- `bureau_score`: credit bureau score (optional)
+- `employment_status`: employed / self_employed / unemployed / retired
+- `loan_purpose`: optional (mortgage, personal, auto, business)
 
-    mova-bridge call mova_hitl_start_credit \
-      --applicant-id APPLICANT_ID \
-      --monthly-income INCOME \
-      --total-debt DEBT \
-      --credit-history-months MONTHS \
-      --bureau-score SCORE \
-      --requested-amount AMOUNT \
-      --loan-purpose PURPOSE
+## Step 2 — Show scoring result and decision options
 
-Wait for JSON output.
+If `status = "waiting_human"` — show risk scoring summary and ask to choose:
 
-## Step 2 — Show score and decision options
+```
+Application:       APP-ID
+Applicant:         CUST-ID
+Score:             SCORE / 1000  (RISK_BAND)
+DTI ratio:         DTI%
+Bureau score:      BUREAU_SCORE
+Recommended limit: EUR AMOUNT
+Findings:          [list with severity]
+Recommended action: ACTION ← RECOMMENDED
+```
 
-If `status = "waiting_human"` — show the scoring summary:
+| Option | Description |
+|---|---|
+| `approve` | Approve at requested amount |
+| `approve_reduced` | Approve at reduced credit limit |
+| `reject` | Reject application |
+| `request_info` | Request additional financial information |
 
-    Applicant:       APPLICANT_ID
-    Score:           SCORE / 1000  (RISK_BAND)
-    Recommended:     RECOMMENDED_LIMIT CURRENCY
-    Debt-to-income:  DTI_RATIO %
-    Key factors:     [list top factors]
-    Model version:   MODEL_VERSION
-
-Then ask credit officer to choose:
-
-- **approve** — Approve credit at recommended limit
-- **approve_reduced** — Approve at reduced limit (specify amount in reason)
-- **reject** — Reject application
-- **request_info** — Request additional documents from applicant
-
-Then run exec:
-
-    mova-bridge call mova_hitl_decide --contract-id CONTRACT_ID --option OPTION --reason "REASON"
+Call tool `mova_hitl_decide` with:
+- `contract_id`: from the response above — this is `ctr-crd-xxxxxxxx`, NOT the application ID
+- `option`: chosen decision
+- `reason`: credit officer reasoning
 
 ## Step 3 — Show audit receipt
 
-If `status = "completed"`:
+Call tool `mova_hitl_audit` with `contract_id`.
+Call tool `mova_hitl_audit_compact` with `contract_id` for the full signed scoring chain.
 
-    ✅ Credit decision [applicant_id] — CONTRACT_ID
+## Connect your real credit systems
 
-    Decision:      OPTION
-    Model version: MODEL_VERSION
-    Audit receipt: AUDIT_RECEIPT_ID
+By default MOVA uses a sandbox mock. To route scoring against your live infrastructure, call `mova_list_connectors` with `keyword: "credit"`.
 
-## Other commands
+Relevant connectors:
 
-    mova-bridge call mova_hitl_status --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit --contract-id CONTRACT_ID
-    mova-bridge call mova_hitl_audit_compact --contract-id CONTRACT_ID
+| Connector ID | What it covers |
+|---|---|
+| `connector.credit.scoring_model_v1` | Internal credit scoring model |
+| `connector.credit.bureau_v1` | External credit bureau score and history |
 
-## Connect your real scoring systems
-
-By default MOVA uses a sandbox mock. To use your real infrastructure:
-
-    # See available credit connectors
-    mova-bridge call mova_list_connectors --keyword credit
-
-    # Register your scoring model endpoint
-    mova-bridge call mova_register_connector \
-      --connector-id connector.credit.scoring_model_v1 \
-      --endpoint https://your-scoring.example.com/api/score \
-      --label "Production Scoring Model" \
-      --auth-header X-Api-Key \
-      --auth-value YOUR_KEY
-
-    # Register your bureau data endpoint
-    mova-bridge call mova_register_connector \
-      --connector-id connector.credit.bureau_v1 \
-      --endpoint https://your-bureau.example.com/api/report \
-      --label "Credit Bureau" \
-      --auth-header X-Api-Key \
-      --auth-value YOUR_KEY
-
-After registration all contracts in your org use your endpoint instead of the mock.
-To revert: `mova-bridge call mova_delete_connector_override --connector-id CONNECTOR_ID`
-
-If the user asks "how do I connect my real systems" — walk through these steps.
+Call `mova_register_connector` with `connector_id`, `endpoint`, optional `auth_header` and `auth_value`.
 
 ## Rules
 
 - NEVER make HTTP requests manually
-- NEVER construct JSON payloads for MOVA API
-- NEVER invent or simulate scoring results
-- Human approval is mandatory — never auto-issue a credit decision
-- If exec fails — show the exact error, do not retry via HTTP
-- Run exec command directly: mova-bridge call ... (not wrapped in bash)
+- NEVER invent or simulate credit scores — if a tool call fails, show the exact error
+- Use MOVA plugin tools directly — do NOT use exec or shell
+- CONTRACT_ID is `ctr-crd-xxxxxxxx` from the mova_hitl_start_credit response — NOT the application ID
