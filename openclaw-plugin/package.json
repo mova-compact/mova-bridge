@@ -24,7 +24,9 @@
     "extensions": [
       "./dist/index.js"
     ],
-    "openclawRuntime": ">=2026.3.0"
+    "compat": {
+      "pluginApi": "^0.3.0"
+    }
   },
   "files": [
     "dist",
