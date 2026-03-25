@@ -1,6 +1,6 @@
 {
   "name": "openclaw-mova",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MOVA HITL tools for OpenClaw — native agent tools for contract-driven business workflows",
   "type": "module",
   "license": "MIT-0",

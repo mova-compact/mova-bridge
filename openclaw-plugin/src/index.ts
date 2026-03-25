@@ -126,6 +126,66 @@ const AML_STEPS = [
   },
 ];
 
+// ── Intent Calibration schemas ────────────────────────────────────────────────
+
+interface CalibrationField {
+  field: string;
+  question: string;
+  example: string;
+  required: boolean;
+}
+
+const CONTRACT_SCHEMAS: Record<string, CalibrationField[]> = {
+  invoice: [
+    { field: "file_url",     question: "Provide the direct HTTPS URL to the invoice document (PDF, JPEG or PNG).", example: "https://example.com/invoice.jpg", required: true },
+    { field: "document_id",  question: "Provide a document ID, or reply 'skip' to auto-generate.", example: "INV-2026-0441", required: false },
+  ],
+  po: [
+    { field: "po_id",                 question: "What is the purchase order number?",              example: "PO-2026-001", required: true },
+    { field: "approver_employee_id",  question: "What is the HR employee ID of the approver?",     example: "EMP-1042",    required: true },
+  ],
+  trade: [
+    { field: "trade_id",        question: "What is the trade order ID?",                          example: "TRD-2026-0001",  required: true },
+    { field: "wallet_address",  question: "What is the wallet address to screen?",                example: "0xabc123…",      required: true },
+    { field: "chain",           question: "Which blockchain network?",                            example: "ethereum",       required: true },
+    { field: "token_pair",      question: "Which token pair?",                                    example: "BTC/USDT",       required: true },
+    { field: "side",            question: "Buy or sell?",                                         example: "buy",            required: true },
+    { field: "order_type",      question: "What order type?",                                     example: "market",         required: true },
+    { field: "order_size_usd",  question: "What is the order size in USD?",                       example: "5000",           required: true },
+    { field: "leverage",        question: "What leverage multiplier? (1 = no leverage)",          example: "1",              required: true },
+  ],
+  complaint: [
+    { field: "complaint_id",      question: "What is the complaint ID?",                                               example: "CMP-2026-1001",              required: true },
+    { field: "customer_id",       question: "What is the customer ID?",                                                example: "C-789",                       required: true },
+    { field: "complaint_text",    question: "Provide the full complaint text.",                                        example: "Payment deducted twice…",     required: true },
+    { field: "channel",           question: "Through which channel was the complaint submitted?",                      example: "web, email, phone, chat",     required: true },
+    { field: "product_category",  question: "Which product or service category does this complaint concern?",          example: "payments, mortgage, insurance", required: true },
+    { field: "complaint_date",    question: "What is the complaint date (ISO format)?",                                example: "2026-03-25",                  required: true },
+  ],
+  aml: [
+    { field: "alert_id",               question: "What is the AML alert ID?",                                            example: "ALERT-1002",              required: true },
+    { field: "rule_id",                question: "What is the transaction monitoring rule ID?",                           example: "TM-STRUCT-11",            required: true },
+    { field: "rule_description",       question: "Describe the rule that triggered the alert.",                           example: "Structuring pattern",     required: true },
+    { field: "risk_score",             question: "What is the risk score (0–100)?",                                       example: "72",                      required: true },
+    { field: "customer_id",            question: "What is the customer ID?",                                              example: "C-1042",                  required: true },
+    { field: "customer_name",          question: "What is the customer's full name?",                                     example: "Ivan Petrov",             required: true },
+    { field: "customer_risk_rating",   question: "What is the customer risk rating?",                                     example: "low, medium, or high",    required: true },
+    { field: "customer_type",          question: "Is the customer an individual or a business?",                          example: "individual",              required: true },
+    { field: "customer_jurisdiction",  question: "What is the customer's jurisdiction (ISO 3166-1 alpha-2)?",             example: "DE",                      required: true },
+    { field: "triggered_transactions", question: "List the triggered transactions as a JSON array.",                      example: '[{"transaction_id":"TXN-001","amount_eur":9800}]', required: true },
+    { field: "pep_status",             question: "Is the customer a Politically Exposed Person (PEP)? (true/false)",      example: "false",                   required: true },
+    { field: "sanctions_match",        question: "Is there a sanctions list match? (true/false)",                         example: "false",                   required: true },
+  ],
+};
+
+const START_TOOL: Record<string, string> = {
+  invoice:   "mova_hitl_start",
+  po:        "mova_hitl_start_po",
+  trade:     "mova_hitl_start_trade",
+  complaint: "mova_hitl_start_complaint",
+  aml:       "mova_hitl_start_aml",
+};
+
 // ── Plugin definition ─────────────────────────────────────────────────────────
 
 const plugin: OpenClawPluginDefinition = {
@@ -445,6 +505,71 @@ const plugin: OpenClawPluginDefinition = {
         );
         const text = await res.text();
         return toolResult({ ok: res.ok, status: res.status, journal: text });
+      },
+    });
+
+    // ── Intent Calibration ────────────────────────────────────────────────────
+
+    api.registerTool({
+      name: "mova_calibrate_intent",
+      label: "MOVA: Calibrate Intent",
+      description: "Pre-flight check before starting a MOVA contract. Call this when the user's request is ambiguous or missing required fields. Pass collected answers; get back either the next required question (ASK) or confirmation that all inputs are ready (VALID). RULE: never guess or infer missing values — only pass values explicitly stated by the user.",
+      parameters: Type.Object({
+        contract_type: Type.String({
+          description: "Contract type: invoice | po | trade | complaint | aml",
+        }),
+        answers: Type.Array(
+          Type.Object({
+            field: Type.String({ description: "Field name" }),
+            value: Type.String({ description: "Value explicitly provided by the user" }),
+          }),
+          { description: "Answers collected so far from the user. Empty array on first call." }
+        ),
+      }),
+      async execute(_id, p) {
+        const contractType = p.contract_type as string;
+        const schema = CONTRACT_SCHEMAS[contractType];
+
+        if (!schema) {
+          return toolResult({
+            status: "UNKNOWN_CONTRACT_TYPE",
+            message: `Unknown contract type: "${contractType}". Available: ${Object.keys(CONTRACT_SCHEMAS).join(", ")}`,
+          });
+        }
+
+        const answersMap = new Map<string, string>(
+          (p.answers as Array<{ field: string; value: string }>).map(a => [a.field, a.value.trim()])
+        );
+
+        const required = schema.filter(f => f.required);
+        const missing  = required.filter(f => !answersMap.get(f.field));
+
+        if (missing.length > 0) {
+          const next = missing[0];
+          return toolResult({
+            status: "ASK",
+            field: next.field,
+            question: next.question,
+            example: next.example,
+            progress: `${required.length - missing.length} of ${required.length} required fields collected`,
+            instruction: "Ask the user this question exactly. Do not attempt to answer it yourself.",
+          });
+        }
+
+        // All required fields present — assemble resolved inputs
+        const resolved: Record<string, string> = {};
+        for (const f of schema) {
+          const val = answersMap.get(f.field);
+          if (val) resolved[f.field] = val;
+        }
+
+        return toolResult({
+          status: "VALID",
+          contract_type: contractType,
+          resolved_inputs: resolved,
+          next_tool: START_TOOL[contractType],
+          instruction: `All required inputs collected. Call ${START_TOOL[contractType]} with these resolved_inputs.`,
+        });
       },
     });
 
