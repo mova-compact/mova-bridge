@@ -34,7 +34,7 @@
     "openclaw.plugin.json"
   ],
   "peerDependencies": {
-    "openclaw": "*"
+    "openclaw": "^1.0.0"
   },
   "devDependencies": {
     "@sinclair/typebox": "^0.33.0",
