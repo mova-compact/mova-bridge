@@ -23,17 +23,14 @@
   "openclaw": {
     "extensions": [
       "./dist/index.js"
-    ],
-    "compat": {
-      "pluginApi": ">=2026.1.0"
-    }
+    ]
   },
   "files": [
     "dist",
     "openclaw.plugin.json"
   ],
   "peerDependencies": {
-    "openclaw": ">=2026.1.0"
+    "openclaw": "*"
   },
   "devDependencies": {
     "@sinclair/typebox": "^0.33.0",
