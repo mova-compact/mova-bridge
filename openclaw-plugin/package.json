@@ -24,7 +24,9 @@
     "extensions": [
       "./dist/index.js"
     ],
-    "pluginApi": ">=2026.1.0"
+    "compat": {
+      "pluginApi": ">=2026.1.0"
+    }
   },
   "files": [
     "dist",
