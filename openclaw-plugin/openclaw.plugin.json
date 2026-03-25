@@ -4,7 +4,7 @@
   "description": "HITL contract execution for business workflows — invoice OCR, PO approval, AML triage, complaints handling, crypto trade review, and connector registry.",
   "version": "0.3.0",
   "compat": {
-    "pluginApi": "1.0.0"
+    "pluginApi": ">=2026.1.0"
   },
   "configSchema": {
     "type": "object",
