@@ -35,6 +35,17 @@ Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 - Audit journal → MOVA R2 storage, signed, accessible only via your API key
 - No data stored locally or sent to third parties beyond the above
 
+## Demo
+
+**Step 1 — Supplier batch submitted with screening request**
+![Step 1](screenshots/01-input.jpg)
+
+**Step 2 — AI screening: sanctions hit on SUP-002, ESG risk on SUP-003, mandatory escalation triggered**
+![Step 2](screenshots/02-analysis.jpg)
+
+**Step 3 — Audit receipt + signed decision log**
+![Step 3](screenshots/03-audit.jpg)
+
 ## Quick start
 
 Say "screen these suppliers for procurement" and provide:

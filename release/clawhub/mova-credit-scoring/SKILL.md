@@ -34,6 +34,17 @@ Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 - Audit journal → MOVA R2 storage, signed, accessible only via your API key
 - No data sent to third parties beyond the above
 
+## Demo
+
+**Step 1 — Application submitted: APP-2026-0041, €25K, bureau score 612**
+![Step 1](screenshots/01-input.jpg)
+
+**Step 2 — AI scoring: risk band fair, DTI 0.017, approve_reduced recommended at €5K**
+![Step 2](screenshots/02-analysis.jpg)
+
+**Step 3 — Decision recorded: approve_reduced + audit receipt**
+![Step 3](screenshots/03-audit.jpg)
+
 ## Quick start
 
 Say "score credit application APP-2026-0041 for applicant CUST-1501" and provide:

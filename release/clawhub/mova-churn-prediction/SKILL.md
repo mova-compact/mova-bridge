@@ -35,6 +35,17 @@ Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 - Audit journal → MOVA R2 storage, signed, accessible only via your API key
 - No data sent to third parties beyond the above
 
+## Demo
+
+**Step 1 — Segment submitted: SEG-ENTERPRISE, 30 days, threshold 0.70**
+![Step 1](screenshots/01-input.jpg)
+
+**Step 2 — AI analysis: 300 at-risk customers, avg score 0.75, top signals and findings**
+![Step 2](screenshots/02-analysis.jpg)
+
+**Step 3 — Decision recorded: launch_selective top 10 by churn score + audit receipt**
+![Step 3](screenshots/03-audit.jpg)
+
 ## Quick start
 
 Say "run churn analysis for segment SEG-ENTERPRISE over the last 30 days":

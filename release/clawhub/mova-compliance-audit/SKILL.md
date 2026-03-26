@@ -34,6 +34,17 @@ Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 - Audit journal → MOVA R2 storage, cryptographically signed, accessible only via your API key
 - No data sent to third parties beyond the above
 
+## Demo
+
+**Step 1 — Document submitted for GDPR audit**
+![Step 1](screenshots/01-input.jpg)
+
+**Step 2 — AI findings: 3 critical violations, missing DPIA, reject recommended**
+![Step 2](screenshots/02-analysis.jpg)
+
+**Step 3 — Audit receipt + signed decision log**
+![Step 3](screenshots/03-audit.jpg)
+
 ## Quick start
 
 Say "run GDPR compliance audit on this document" and provide a document URL or ID:

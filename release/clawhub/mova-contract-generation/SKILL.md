@@ -31,6 +31,17 @@ Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
 - Audit journal → MOVA R2 storage, signed, accessible only via your API key
 - No data sent to third parties beyond the above
 
+## Demo
+
+**Step 1 — NDA generation request: Vortex Analytics ↔ NordStern Capital, German law**
+![Step 1](screenshots/01-input.jpg)
+
+**Step 2 — AI draft generated: 7 sections with full text, risk score 0.2**
+![Step 2](screenshots/02-analysis.jpg)
+
+**Step 3 — Section approved, audit receipt with signed decision log**
+![Step 3](screenshots/03-audit.jpg)
+
 ## Quick start
 
 Say "generate an NDA between Acme Corp and Beta GmbH, governed by German law":
