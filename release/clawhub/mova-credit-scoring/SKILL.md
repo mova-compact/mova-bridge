@@ -2,7 +2,7 @@
 name: mova-credit-scoring
 description: Submit a loan application for AI credit risk scoring and human-gated credit decision via MOVA HITL. Trigger when the user mentions a loan application, credit assessment, borrower review, or asks to score credit risk. Human credit officer approval is mandatory before any credit decision is issued.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"applicant ID, financial data (income, debt, requested amount), bureau score, AI risk band, human decision, audit metadata"},{"service":"Credit scoring model connector (read-only)","data":"applicant financial features evaluated against scoring model"},{"service":"Credit bureau connector (read-only)","data":"applicant ID used for bureau score and credit history lookup"}]}}
+metadata: {"openclaw":{"plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"applicant ID, financial data (income, debt, requested amount), bureau score, AI risk band, human decision, audit metadata"},{"service":"Credit scoring model connector (read-only)","data":"applicant financial features evaluated against scoring model"},{"service":"Credit bureau connector (read-only)","data":"applicant ID used for bureau score and credit history lookup"}]}}
 ---
 
 # MOVA Credit Scoring
@@ -24,14 +24,13 @@ Submit a loan application to MOVA for automated credit risk scoring — with exp
 
 ## Requirements
 
-**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
-Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+**Plugin:** MOVA OpenClaw plugin must be installed in your OpenClaw workspace.
 
 **Data flows:**
 - Applicant ID + financial data → `api.mova-lab.eu` (MOVA platform, EU-hosted)
 - Financial features → credit scoring model (server-side, read-only)
 - Applicant ID → credit bureau (read-only, no data stored)
-- Audit journal → MOVA R2 storage, signed, accessible only via your API key
+- Audit journal → MOVA R2 storage, signed
 - No data sent to third parties beyond the above
 
 ## Demo

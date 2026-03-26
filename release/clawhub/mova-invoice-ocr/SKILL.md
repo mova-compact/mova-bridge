@@ -2,7 +2,7 @@
 name: mova-invoice-ocr
 description: Process any financial document — invoice, bill, receipt, or purchase order — via MOVA OCR and human-in-the-loop approval. Trigger when the user shares a document image URL or asks to process, extract, or review a financial document. Always confirm before starting.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"invoice image URL, extracted document fields, human decision, audit metadata"},{"service":"ERP connector (read-only mock by default)","data":"PO reference number for cross-reference lookup"}]}}
+metadata: {"openclaw":{"plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"invoice image URL, extracted document fields, human decision, audit metadata"},{"service":"ERP connector (read-only mock by default)","data":"PO reference number for cross-reference lookup"}]}}
 ---
 
 # MOVA Invoice OCR & Approval
@@ -18,13 +18,12 @@ Submit a supplier invoice to MOVA for automated OCR extraction, risk validation,
 
 ## Requirements
 
-**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
-Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+**Plugin:** MOVA OpenClaw plugin must be installed in your OpenClaw workspace.
 
 **Data flows:**
 - Invoice image URL + extracted fields → `api.mova-lab.eu` (MOVA platform, EU-hosted)
 - PO reference number → ERP connector (read-only lookup, no data stored)
-- Audit journal → MOVA R2 storage, cryptographically signed, accessible only via your API key
+- Audit journal → MOVA R2 storage, cryptographically signed
 - No data is sent to third parties beyond the above
 
 ## Quick start

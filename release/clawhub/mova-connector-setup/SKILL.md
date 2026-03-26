@@ -2,7 +2,7 @@
 name: mova-connector-setup
 description: Help the user connect their real business systems (ERP, CRM, AML, market data, etc.) to MOVA by registering custom connector endpoints. Trigger when the user asks "how do I use my real data", "connect my ERP", "use production data", "register a connector", or mentions wanting to replace the MOVA sandbox mock with their own system.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"connector ID, endpoint URL, auth header — to register connector overrides for your org"}]}}
+metadata: {"openclaw":{"plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"connector ID, endpoint URL, auth header — to register connector overrides for your org"}]}}
 ---
 
 # MOVA Connector Setup

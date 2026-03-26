@@ -2,7 +2,7 @@
 name: mova-aml-triage
 description: Submit an AML transaction monitoring alert for automated L1 triage and human-in-the-loop compliance decision via MOVA. Trigger when the user mentions an AML alert, transaction monitoring alert ID, or asks to triage/review a suspicious transaction alert. Mandatory human escalation on sanctions hit, PEP flag, or risk score above 85.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"alert ID, rule ID, risk score, customer data, transaction list, PEP/sanctions flags, human decision, audit metadata"},{"service":"Sanctions screening connector (read-only)","data":"customer ID and transaction data screened against OFAC, EU, UN lists"},{"service":"Customer risk connector (read-only)","data":"customer ID for risk rating and prior alert history lookup"}]}}
+metadata: {"openclaw":{"plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"alert ID, rule ID, risk score, customer data, transaction list, PEP/sanctions flags, human decision, audit metadata"},{"service":"Sanctions screening connector (read-only)","data":"customer ID and transaction data screened against OFAC, EU, UN lists"},{"service":"Customer risk connector (read-only)","data":"customer ID for risk rating and prior alert history lookup"}]}}
 ---
 
 # MOVA AML Alert Triage
@@ -23,14 +23,13 @@ Submit a transaction monitoring alert to MOVA for automated L1 triage — with t
 
 ## Requirements
 
-**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
-Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+**Plugin:** MOVA OpenClaw plugin must be installed in your OpenClaw workspace.
 
 **Data flows:**
 - Alert data + customer ID + transactions → `api.mova-lab.eu` (MOVA platform, EU-hosted)
 - Customer data → sanctions screening (OFAC, EU, UN — read-only, no data stored)
 - Customer ID → risk rating and prior alert history (read-only)
-- Audit journal → MOVA R2 storage, cryptographically signed, accessible only via your API key
+- Audit journal → MOVA R2 storage, cryptographically signed
 - No data is sent to third parties beyond the above
 
 ## Quick start

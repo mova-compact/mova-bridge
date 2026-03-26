@@ -2,7 +2,7 @@
 name: mova-po-approval
 description: Submit a purchase order for automated risk analysis and procurement approval via MOVA HITL. Trigger when the user mentions a PO number, asks to approve/review a purchase order, or says anything like "check this PO", "approve purchase order", "PO review", "procurement approval".
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"PO ID, approver employee ID, AI analysis results, human decision, audit metadata"},{"service":"ERP connector (server-side, read-only)","data":"PO fields, vendor registry, budget data, authority matrix — accessed by MOVA runtime, not by the agent"}]}}
+metadata: {"openclaw":{"plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"PO ID, approver employee ID, AI analysis results, human decision, audit metadata"},{"service":"ERP connector (server-side, read-only)","data":"PO fields, vendor registry, budget data, authority matrix — accessed by MOVA runtime, not by the agent"}]}}
 ---
 
 # MOVA Purchase Order Approval
@@ -18,8 +18,7 @@ Submit a purchase order to MOVA for automated risk analysis and a human decision
 
 ## Requirements
 
-**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
-Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+**Plugin:** MOVA OpenClaw plugin must be installed in your OpenClaw workspace.
 
 **ERP connector — no additional credentials required:**
 Vendor registry, budget data, and authority matrix are fetched server-side by the MOVA runtime. The agent does not need separate ERP credentials.
@@ -27,7 +26,7 @@ Vendor registry, budget data, and authority matrix are fetched server-side by th
 **Data flows:**
 - PO ID + approver ID → `api.mova-lab.eu` (MOVA platform, EU-hosted)
 - ERP data (vendor/budget/authority) → fetched by MOVA runtime server-side, read-only, not stored
-- Audit journal → MOVA R2 storage, signed, accessible only via your API key
+- Audit journal → MOVA R2 storage, signed
 - No data sent to third parties beyond the above
 
 ## Quick start

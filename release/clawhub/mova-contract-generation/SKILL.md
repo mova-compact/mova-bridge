@@ -2,7 +2,7 @@
 name: mova-contract-generation
 description: Generate a legal document draft (NDA, service agreement, supply contract, SLA) from a structured template via MOVA HITL, with section-by-section human review gates before finalizing. Trigger when the user asks to create or draft a contract, NDA, agreement, or legal document from a template. Human legal review is required before the document is finalized.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"document type, party names, jurisdiction, key terms, AI-generated section drafts, reviewer edits, human approvals, audit metadata"},{"service":"Legal template repository connector (read-only)","data":"template ID used to fetch the base document structure"},{"service":"Document storage connector","data":"finalized document stored in configured repository after all sections are approved"}]}}
+metadata: {"openclaw":{"plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"document type, party names, jurisdiction, key terms, AI-generated section drafts, reviewer edits, human approvals, audit metadata"},{"service":"Legal template repository connector (read-only)","data":"template ID used to fetch the base document structure"},{"service":"Document storage connector","data":"finalized document stored in configured repository after all sections are approved"}]}}
 ---
 
 # MOVA Contract Generation
@@ -21,14 +21,13 @@ Every draft version, edit, reviewer identity, and approval timestamp is recorded
 
 ## Requirements
 
-**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
-Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+**Plugin:** MOVA OpenClaw plugin must be installed in your OpenClaw workspace.
 
 **Data flows:**
 - Document parameters + party data → `api.mova-lab.eu` (MOVA platform, EU-hosted)
 - Template ID → legal template repository (read-only, fetches base structure)
 - Finalized document → document storage connector (written on completion)
-- Audit journal → MOVA R2 storage, signed, accessible only via your API key
+- Audit journal → MOVA R2 storage, signed
 - No data sent to third parties beyond the above
 
 ## Demo

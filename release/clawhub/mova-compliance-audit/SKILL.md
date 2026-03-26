@@ -2,7 +2,7 @@
 name: mova-compliance-audit
 description: Submit documents for AI-powered compliance audit against GDPR, PCI-DSS, ISO 27001, or SOC 2 via MOVA HITL. Trigger when the user uploads a document and mentions compliance, regulation, or audit, asks to validate against a regulatory framework, or says "check GDPR compliance", "run PCI-DSS audit", "validate ISO 27001". Human sign-off is mandatory before any audit report is finalized.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"document URL or ID, organization name, selected regulatory framework, AI findings, human decision, audit metadata"},{"service":"Document OCR connector (read-only)","data":"document content extracted for structure parsing and checklist evaluation"},{"service":"Compliance rules engine connector (read-only)","data":"document structure evaluated against framework-specific rule set"}]}}
+metadata: {"openclaw":{"plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"document URL or ID, organization name, selected regulatory framework, AI findings, human decision, audit metadata"},{"service":"Document OCR connector (read-only)","data":"document content extracted for structure parsing and checklist evaluation"},{"service":"Compliance rules engine connector (read-only)","data":"document structure evaluated against framework-specific rule set"}]}}
 ---
 
 # MOVA Compliance Audit
@@ -24,14 +24,13 @@ Submit an organization's documents to MOVA for automated regulatory compliance a
 
 ## Requirements
 
-**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
-Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+**Plugin:** MOVA OpenClaw plugin must be installed in your OpenClaw workspace.
 
 **Data flows:**
 - Document URL/ID + org metadata → `api.mova-lab.eu` (MOVA platform, EU-hosted)
 - Document content → OCR extraction connector (read-only, no data stored)
 - Extracted structure → compliance rules engine (framework-specific, read-only)
-- Audit journal → MOVA R2 storage, cryptographically signed, accessible only via your API key
+- Audit journal → MOVA R2 storage, cryptographically signed
 - No data sent to third parties beyond the above
 
 ## Demo

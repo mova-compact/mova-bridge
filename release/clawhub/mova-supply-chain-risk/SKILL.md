@@ -2,7 +2,7 @@
 name: mova-supply-chain-risk
 description: Screen suppliers against sanctions lists, PEP registries, ESG ratings, and financial stability data via MOVA HITL, then route findings through a human procurement decision gate. Trigger when the user provides a supplier list, asks to screen vendors, or requests a supply chain due diligence report. Mandatory human sign-off before any procurement decision.
 license: MIT-0
-metadata: {"openclaw":{"primaryEnv":"MOVA_API_KEY","plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova","configKey":"plugins.entries.mova.config.apiKey"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"supplier names, IDs, country of registration, procurement category, AI risk bands, human decision, audit metadata"},{"service":"Sanctions & PEP screening connector (read-only)","data":"supplier name and country screened against OFAC, EU, UN lists and PEP registries"},{"service":"ESG ratings connector (read-only)","data":"supplier ID for ESG score and adverse media lookup"},{"service":"Company registry connector (read-only)","data":"supplier name and country for registration status and financial stability check"}]}}
+metadata: {"openclaw":{"plugin":{"name":"MOVA","installCmd":"openclaw plugins install openclaw-mova"},"dataSentToExternalServices":[{"service":"MOVA API (api.mova-lab.eu)","data":"supplier names, IDs, country of registration, procurement category, AI risk bands, human decision, audit metadata"},{"service":"Sanctions & PEP screening connector (read-only)","data":"supplier name and country screened against OFAC, EU, UN lists and PEP registries"},{"service":"ESG ratings connector (read-only)","data":"supplier ID for ESG score and adverse media lookup"},{"service":"Company registry connector (read-only)","data":"supplier name and country for registration status and financial stability check"}]}}
 ---
 
 # MOVA Supply Chain Risk Analysis
@@ -24,15 +24,14 @@ Screen your supplier list against sanctions registries, PEP databases, ESG ratin
 
 ## Requirements
 
-**Plugin:** MOVA OpenClaw plugin must be installed and configured with your API key.
-Get your key at [mova-lab.eu/register](https://mova-lab.eu/register).
+**Plugin:** MOVA OpenClaw plugin must be installed in your OpenClaw workspace.
 
 **Data flows:**
 - Supplier data + procurement category → `api.mova-lab.eu` (MOVA platform, EU-hosted)
 - Supplier names/countries → sanctions & PEP screening (OFAC, EU, UN — read-only)
 - Supplier IDs → ESG ratings and adverse media lookup (read-only)
 - Supplier name/country → company registry and financial stability check (read-only)
-- Audit journal → MOVA R2 storage, signed, accessible only via your API key
+- Audit journal → MOVA R2 storage, signed
 - No data stored locally or sent to third parties beyond the above
 
 ## Demo
