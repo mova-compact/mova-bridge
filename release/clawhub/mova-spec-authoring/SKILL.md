@@ -1,10 +1,10 @@
 ---
-name: mova-contract-writer
-description: Translate a pre-contract (output of mova-intent-calibration) into a complete, valid MOVA contract — envelope, data schema references, instruction profile, and episode frame. Trigger when the user provides a pre-contract document and asks to generate a MOVA contract, formalize it, or turn it into executable form. Requires a completed pre-contract with status VALID.
+name: mova-spec-authoring
+description: Author a new MOVA-spec contract from a pre-contract — translate intent calibration output into a complete MOVA artifact (envelope, instruction profile, episode frame) that can be registered and executed by any MOVA-compliant runtime. Use when the user wants to build their own executable MOVA contract, not when they want to generate a legal document. Requires a completed pre-contract with status VALID from mova-intent-calibration.
 license: MIT-0
 ---
 
-# MOVA Contract Writer
+# MOVA Spec Authoring
 
 Transform a fully calibrated pre-contract into a complete MOVA contract — structured JSON with envelope, instruction profile, and episode frame — ready for execution by any MOVA-compliant runtime.
 
@@ -152,7 +152,7 @@ Show to user. Ask to approve or edit.
   "tool_id": 0,
   "executor": {
     "role": "ai_agent",
-    "skill_id": "mova-contract-writer"
+    "skill_id": "mova-spec-authoring"
   },
   "input_envelopes": [
     { "envelope_type": "env.[domain]_[operation]_v1" }
